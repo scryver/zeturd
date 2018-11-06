@@ -1,0 +1,7 @@
+R1 = IO + 1
+R2 = R1 + 0b1011
+R3 = R2 & 0x7
+IO = R3
+IO = R2 + 1
+IO = R1
+IO = R0 + R2
