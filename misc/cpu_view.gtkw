@@ -1,0 +1,31 @@
+[*]
+[*] GTKWave Analyzer v3.3.94 (w)1999-2018 BSI
+[*] Tue Nov  6 23:32:35 2018
+[*]
+[dumpfile] "/home/michiel/code/cpus/zeturd/gebouw/tbs/cpu_wave.ghw"
+[dumpfile_mtime] "Tue Nov  6 23:32:14 2018"
+[dumpfile_size] 16523
+[savefile] "/home/michiel/code/cpus/zeturd/misc/cpu_view.gtkw"
+[timestart] 136700000
+[size] 1305 882
+[pos] -1 -1
+*-27.000000 438000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] top.
+[treeopen] top.tb_cpu.
+[treeopen] top.tb_cpu.dut.
+[treeopen] top.tb_cpu.dut.control.
+[sst_width] 211
+[signals_width] 305
+[sst_expanded] 1
+[sst_vpaned_height] 242
+@28
+top.tb_cpu.nrst
+top.tb_cpu.clk
+@25
+#{top.tb_cpu.din[7:0]} top.tb_cpu.din[7] top.tb_cpu.din[6] top.tb_cpu.din[5] top.tb_cpu.din[4] top.tb_cpu.din[3] top.tb_cpu.din[2] top.tb_cpu.din[1] top.tb_cpu.din[0]
+#{top.tb_cpu.dout[7:0]} top.tb_cpu.dout[7] top.tb_cpu.dout[6] top.tb_cpu.dout[5] top.tb_cpu.dout[4] top.tb_cpu.dout[3] top.tb_cpu.dout[2] top.tb_cpu.dout[1] top.tb_cpu.dout[0]
+@22
+#{top.tb_cpu.dut.control.pc_counter[3:0]} top.tb_cpu.dut.control.pc_counter[3] top.tb_cpu.dut.control.pc_counter[2] top.tb_cpu.dut.control.pc_counter[1] top.tb_cpu.dut.control.pc_counter[0]
+#{top.tb_cpu.dut.control.opc[63:0]} top.tb_cpu.dut.control.opc[63] top.tb_cpu.dut.control.opc[62] top.tb_cpu.dut.control.opc[61] top.tb_cpu.dut.control.opc[60] top.tb_cpu.dut.control.opc[59] top.tb_cpu.dut.control.opc[58] top.tb_cpu.dut.control.opc[57] top.tb_cpu.dut.control.opc[56] top.tb_cpu.dut.control.opc[55] top.tb_cpu.dut.control.opc[54] top.tb_cpu.dut.control.opc[53] top.tb_cpu.dut.control.opc[52] top.tb_cpu.dut.control.opc[51] top.tb_cpu.dut.control.opc[50] top.tb_cpu.dut.control.opc[49] top.tb_cpu.dut.control.opc[48] top.tb_cpu.dut.control.opc[47] top.tb_cpu.dut.control.opc[46] top.tb_cpu.dut.control.opc[45] top.tb_cpu.dut.control.opc[44] top.tb_cpu.dut.control.opc[43] top.tb_cpu.dut.control.opc[42] top.tb_cpu.dut.control.opc[41] top.tb_cpu.dut.control.opc[40] top.tb_cpu.dut.control.opc[39] top.tb_cpu.dut.control.opc[38] top.tb_cpu.dut.control.opc[37] top.tb_cpu.dut.control.opc[36] top.tb_cpu.dut.control.opc[35] top.tb_cpu.dut.control.opc[34] top.tb_cpu.dut.control.opc[33] top.tb_cpu.dut.control.opc[32] top.tb_cpu.dut.control.opc[31] top.tb_cpu.dut.control.opc[30] top.tb_cpu.dut.control.opc[29] top.tb_cpu.dut.control.opc[28] top.tb_cpu.dut.control.opc[27] top.tb_cpu.dut.control.opc[26] top.tb_cpu.dut.control.opc[25] top.tb_cpu.dut.control.opc[24] top.tb_cpu.dut.control.opc[23] top.tb_cpu.dut.control.opc[22] top.tb_cpu.dut.control.opc[21] top.tb_cpu.dut.control.opc[20] top.tb_cpu.dut.control.opc[19] top.tb_cpu.dut.control.opc[18] top.tb_cpu.dut.control.opc[17] top.tb_cpu.dut.control.opc[16] top.tb_cpu.dut.control.opc[15] top.tb_cpu.dut.control.opc[14] top.tb_cpu.dut.control.opc[13] top.tb_cpu.dut.control.opc[12] top.tb_cpu.dut.control.opc[11] top.tb_cpu.dut.control.opc[10] top.tb_cpu.dut.control.opc[9] top.tb_cpu.dut.control.opc[8] top.tb_cpu.dut.control.opc[7] top.tb_cpu.dut.control.opc[6] top.tb_cpu.dut.control.opc[5] top.tb_cpu.dut.control.opc[4] top.tb_cpu.dut.control.opc[3] top.tb_cpu.dut.control.opc[2] top.tb_cpu.dut.control.opc[1] top.tb_cpu.dut.control.opc[0]
+[pattern_trace] 1
+[pattern_trace] 0

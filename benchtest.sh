@@ -1,20 +1,25 @@
 #!/bin/sh
 
+set -e
+
 curDir=$(pwd)
 codeDir="$curDir/hwsrc"
 testDir="$codeDir/testbenches"
 
-buildDir="$curDir/gebouw/tbs"
+buildDir="$curDir/gebouw"
+tbDir="$curDir/gebouw/tbs"
 
-mkdir -p "$buildDir"
+./tool_build.sh
 
-cd "$buildDir" > /dev/null
+mkdir -p "$tbDir"
 
-    ghdl -a "$codeDir/constants_and_co.vhd"
+cd "$tbDir" > /dev/null
+
+    ghdl -a "$buildDir/gen_constants.vhd"
     ghdl -a "$codeDir/alu.vhd"
-    ghdl -a "$codeDir/controller.vhd"
+    ghdl -a "$buildDir/gen_controller.vhd"
     ghdl -a "$codeDir/io.vhd"
-    ghdl -a "$codeDir/opcode_auto.vhd"
+    ghdl -a "$buildDir/gen_opcodes.vhd"
     ghdl -a "$codeDir/registers.vhd"
     ghdl -a "$codeDir/cpu.vhd"
     ghdl -a "$testDir/tb_cpu.vhd"

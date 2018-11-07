@@ -91,6 +91,8 @@ typedef union OpCode
 #define OPC_SEL_MASK    (OPC_SELALA_MASK | OPC_SELALB_MASK | OPC_SELMEM_MASK | OPC_SELIO_MASK)
 #define OPC_MEMCTL_MASK (OPC_MEMRA_MASK | OPC_MEMRB_MASK | OPC_MEMWR_MASK)
 
+#include "./vhdl_generator.c"
+
 internal char *
 select_to_string(enum Selection select)
 {
@@ -155,6 +157,20 @@ global u32 gRegisterCount;
 global Map gRegisterMap_ = {0};
 global Map *gRegisterMap = &gRegisterMap_;
 
+internal inline u32
+get_register_location(String varName)
+{
+    u32 *result = map_get(gRegisterMap, varName.data);
+    if (!result)
+    {
+        result = allocate_size(sizeof(u32), 0);
+        *result = gRegisterCount++;
+        map_put(gRegisterMap, varName.data, result);
+    }
+    i_expect(*result < REG_MAX);
+    return *result;
+}
+
 internal void
 push_expression(Expression *expr, OpCode **opCodes)
 {
@@ -169,47 +185,17 @@ push_expression(Expression *expr, OpCode **opCodes)
         {
             i_expect(var->id->name.size);
             String idString = var->id->name;
-
-            if ((idString.size == 2) &&
-                (idString.data[0] == 'I') &&
-                (idString.data[1] == 'O'))
+            
+            if (strings_are_equal(idString, str_internalize_cstring("IO")))
             {
                 op.selectAluA = Select_IO;
             }
             else
             {
-                u32 *result = map_get(gRegisterMap, idString.data);
-                if (!result)
-                {
-                    result = allocate_size(sizeof(u32), 0);
-                    *result = gRegisterCount++;
-                    map_put(gRegisterMap, idString.data, result);
-                }
-                i_expect(*result < REG_MAX);
-                
                 loadOp.memoryReadA = true;
-                loadOp.memoryAddrA = *result;
+                loadOp.memoryAddrA = get_register_location(idString);
                 op.selectAluA = Select_MemoryA;
                                      }
-#if 0            
-            if (idString.data[0] == 'R')
-            {
-                --idString.size;
-                ++idString.data;
-                s32 value = parse_number(idString);
-                i_expect(value < REG_MAX);
-                loadOp.memoryReadA = true;
-                loadOp.memoryAddrA = value;
-                op.selectAluA = Select_MemoryA;
-            }
-            else if ((idString.size == 2) &&
-                     (idString.data[0] == 'I') &&
-                     (idString.data[1] == 'O'))
-            {
-                op.selectAluA = Select_IO;
-            }
-            #endif
-
         }
         else
         {
@@ -238,48 +224,17 @@ push_expression(Expression *expr, OpCode **opCodes)
                 i_expect(var->id->name.size);
                 String idString = var->id->name;
                 
-                if ((idString.size == 2) &&
-                    (idString.data[0] == 'I') &&
-                    (idString.data[1] == 'O'))
+                if (strings_are_equal(idString, str_internalize_cstring("IO")))
                 {
                     op.selectAluB = Select_IO;
                 }
                 else
                 {
-                    u32 *result = map_get(gRegisterMap, idString.data);
-                    if (!result)
-                    {
-                        result = allocate_size(sizeof(u32), 0);
-                        *result = gRegisterCount++;
-                        map_put(gRegisterMap, idString.data, result);
-                    }
-                    i_expect(*result < REG_MAX);
-                    
                     loadOp.useMemoryB = true;
                     loadOp.memoryReadB = true;
-                    loadOp.memoryAddrB = *result;
+                    loadOp.memoryAddrB = get_register_location(idString);
                     op.selectAluB = Select_MemoryB;
                 }
-
-#if 0                
-                if (idString.data[0] == 'R')
-                {
-                    --idString.size;
-                    ++idString.data;
-                    s32 value = parse_number(idString);
-                    i_expect(value < REG_MAX);
-                    loadOp.useMemoryB = true;
-                    loadOp.memoryReadB = true;
-                    loadOp.memoryAddrB = value;
-                    op.selectAluB = Select_MemoryB;
-                }
-                else if ((idString.size == 2) &&
-                         (idString.data[0] == 'I') &&
-                         (idString.data[1] == 'O'))
-                {
-                    op.selectAluB = Select_IO;
-                }
-#endif
             }
             else
             {
@@ -324,51 +279,17 @@ push_assignment(Assignment *assign, OpCode **opCodes)
     i_expect(assign->id->name.size);
     String idString = assign->id->name;
     
-    if ((idString.size == 2) &&
-        (idString.data[0] == 'I') &&
-        (idString.data[1] == 'O'))
+    if (strings_are_equal(idString, str_internalize_cstring("IO")))
     {
         store.selectIO = Select_Alu;
     }
     else
     {
-        u32 *result = map_get(gRegisterMap, idString.data);
-        if (!result)
-        {
-            result = allocate_size(sizeof(u32), 0);
-            *result = gRegisterCount++;
-            map_put(gRegisterMap, idString.data, result);
-        }
-        i_expect(*result < REG_MAX);
-        
         store.selectMem = Select_Alu;
     store.memoryWrite = true;
-        store.memoryAddrA = *result;
+        store.memoryAddrA = get_register_location(idString);
         }
     
-#if 0    
-    if (idString.data[0] == 'R')
-    {
-        --idString.size;
-        ++idString.data;
-        s32 value = parse_number(idString);
-        i_expect(value < REG_MAX);
-        store.selectMem = Select_Alu;
-        store.memoryAddrA = value;
-        store.memoryWrite = true;
-    }
-    else if ((idString.size == 2) &&
-             (idString.data[0] == 'I') &&
-             (idString.data[1] == 'O'))
-    {
-        store.selectIO = Select_Alu;
-    }
-    else
-    {
-        INVALID_CODE_PATH;
-    }
-    #endif
-
     buf_push(*opCodes, store);
 }
 
@@ -560,88 +481,6 @@ optimize_combine_write(OpCode **opCodes)
     }
 }
 
-internal void
-generate_vhdl(OpCode *opCodes, FileStream output)
-{
-    fprintf(output.file, "-- Generated with the TURD machine 0.v.X9.y --\n\n");
-#if 0
-    fprintf(output.file, "    opcodes : entity work.OpCode\n");
-    fprintf(output.file, "    generic map (\n");
-    
-    for (u32 opcIdx = 0; opcIdx < buf_len(opCodes); ++opcIdx)
-    {
-        fprintf(output.file, "        INIT%02X  => X\"%016lX\"%s\n", opcIdx,
-                opCodes[opcIdx].totalOp, opcIdx < (buf_len(opCodes) - 1) ? "," : "");
-    }
-    fprintf(output.file, "    )\n");
-    fprintf(output.file, "    port map (\n");
-    fprintf(output.file, "        clk      => clk,\n");
-    fprintf(output.file, "        nrst     => synced_nrst,\n");
-    fprintf(output.file, "        pc       => pc,\n");
-    fprintf(output.file, "        opcode   => opc);\n\n");
-#else
-    u32 opCount = buf_len(opCodes);
-    // NOTE(michiel): Calc next power of 2
-    u32 bitPos = 0;
-    while (opCount >>= 1)
-    {
-        ++bitPos;
-    }
-    if ((1 << bitPos) < buf_len(opCodes))
-    {
-        ++bitPos;
-    }
-    opCount = 1 << bitPos;
-    
-    fprintf(output.file, "library IEEE;\n");
-    fprintf(output.file, "use IEEE.std_logic_1164.all;\n");
-    fprintf(output.file, "use IEEE.numeric_std.all;\n\n");
-    
-    fprintf(output.file, "entity OpCode is\n");
-    fprintf(output.file, "    generic (\n");
-    fprintf(output.file, "        BITS   : integer := 64;\n");
-    fprintf(output.file, "        DEPTH  : integer := %u\n", bitPos);
-    fprintf(output.file, "    );\n");
-    fprintf(output.file, "    port (\n");
-    fprintf(output.file, "        clk    : in  std_logic;\n");
-    fprintf(output.file, "        nrst   : in  std_logic;\n\n");
-    fprintf(output.file, "        pc     : in  std_logic_vector(DEPTH - 1 downto 0);\n");
-    fprintf(output.file, "        opcode : out std_logic_vector(BITS - 1 downto 0)\n");
-    fprintf(output.file, "    );\n");
-    fprintf(output.file, "end entity; -- OpCode\n\n");
-    
-    fprintf(output.file, "architecture RTL of OpCode is\n\n");
-    fprintf(output.file, "    type rom_block is array(0 to %u) ", opCount - 1);
-    fprintf(output.file, "of std_logic_vector(BITS - 1 downto 0);\n\n");
-    fprintf(output.file, "    signal rom_mem : rom_block := (\n");
-    for (u32 opcIdx = 0; opcIdx < buf_len(opCodes); ++opcIdx)
-    {
-        fprintf(output.file, "        %2u => X\"%016lX\"%s\n", opcIdx,
-                opCodes[opcIdx].totalOp, opcIdx < (opCount - 1) ? "," : "");
-    }
-    for (u32 opcIdx = buf_len(opCodes); opcIdx < opCount; ++opcIdx)
-    {
-        fprintf(output.file, "        %2u => X\"%016lX\"%s\n", opcIdx, 0UL,
-                opcIdx < (opCount - 1) ? "," : "");
-    }
-    fprintf(output.file, "    );\n\n");
-    
-    fprintf(output.file, "begin\n\n");
-    fprintf(output.file, "    clocker : process(clk)\n");
-    fprintf(output.file, "    begin\n");
-    fprintf(output.file, "        if (clk'event and clk = '1') then\n");
-    fprintf(output.file, "            if (nrst = '0') then\n");
-    fprintf(output.file, "                opcode <= (others => '0');\n");
-    fprintf(output.file, "            else\n");
-    fprintf(output.file, "                opcode <= rom_mem(to_integer(unsigned(pc)));\n");
-    fprintf(output.file, "            end if;\n");
-    fprintf(output.file, "        end if;\n");
-    fprintf(output.file, "    end process;\n\n");
-    
-    fprintf(output.file, "end architecture ; -- RTL\n\n");
-#endif
-}
-
 int main(int argc, char **argv)
 {
     int errors = 0;
@@ -659,7 +498,7 @@ int main(int argc, char **argv)
         OpCode *opCodes = 0;
         
         // print_tokens(tokens);
-        //print_parsed_program(outputStream, program);
+        print_parsed_program(outputStream, program);
         
         for (u32 stmtIdx = 0; stmtIdx < program->nrStatements; ++stmtIdx)
         {
@@ -689,9 +528,19 @@ int main(int argc, char **argv)
             print_opcode(opCode, true);
         }
 #else
-        generate_vhdl(opCodes, outputStream);
-#endif
+        FileStream opCodeStream = {0};
+        opCodeStream.file = fopen("gen_opcodes.vhd", "wb");
+        generate_opcode_vhdl(opCodes, opCodeStream);
+        fclose(opCodeStream.file);
         
+        opCodeStream.file = fopen("gen_controller.vhd", "wb");
+        generate_controller(8, buf_len(opCodes), opCodeStream);
+        fclose(opCodeStream.file);
+        
+        opCodeStream.file = fopen("gen_constants.vhd", "wb");
+        generate_constants(opCodeStream);
+        fclose(opCodeStream.file);
+#endif
     }
     else
     {

@@ -24,19 +24,19 @@ architecture RTL of CPU is
     signal cpu_io, io_cpu : std_logic_vector(BITS - 1 downto 0);
     signal io_load : std_logic;
 
-    signal pc  : std_logic_vector(5 downto 0);
+    signal pc  : std_logic_vector(3 downto 0);
     signal opc : std_logic_vector(63 downto 0);
 
     signal cpu_mem, mem_outa, mem_outb : std_logic_vector(BITS - 1 downto 0);
 
-    signal mem_addra, mem_addrb : std_logic_vector(4 downto 0);
+    signal mem_addra, mem_addrb : std_logic_vector(8 downto 0);
     signal mem_write, mem_reada, mem_readb : std_logic;
 
     signal alu_a, alu_b : std_logic_vector(BITS - 1 downto 0);
     signal alu_out : std_logic_vector(BITS downto 0);
     signal alu_trunc : std_logic_vector(BITS - 1 downto 0);
 
-    signal alu_op : std_logic_vector(1 downto 0);
+    signal alu_op : std_logic_vector(6 downto 0);
 
     signal immediate : std_logic_vector(BITS - 1 downto 0);
 
@@ -139,29 +139,10 @@ begin
     --    pc         => pc,
     --    opcode     => opc);
     opcodes : entity work.OpCode
-    --generic map (
-    --    INIT00  => X"8C00060000000001",
-    --    INIT01  => X"0282000100000000",
-    --    INIT02  => X"0008000100000000",
-    --    INIT03  => X"2C0006000000000B",
-    --    INIT04  => X"0282000200000000",
-    --    INIT05  => X"0008000200000000",
-    --    INIT06  => X"2C00020000000007",
-    --    INIT07  => X"0282000300000000",
-    --    INIT08  => X"0008000300000000",
-    --    INIT09  => X"0010000000000000",
-    --    INIT0A  => X"0008000200000000",
-    --    INIT0B  => X"2C00060000000001",
-    --    INIT0C  => X"0050000000000000",
-    --    INIT0D  => X"0008000100000000",
-    --    INIT0E  => X"0010000000000000",
-    --    INIT0F  => X"0008000000000000",
-    --    INIT10  => X"0010000000000000"
-    --)
     port map (
         clk      => clk,
         nrst     => synced_nrst,
-        pc       => pc(3 downto 0),
+        pc       => pc,
         opcode   => opc);
 
 
@@ -176,9 +157,9 @@ begin
         nrst       => synced_nrst,
         data_in    => cpu_mem,
         we         => mem_write,
-        addr_a     => mem_addra,
+        addr_a     => mem_addra(4 downto 0),
         rd_a       => mem_reada,
-        addr_b     => mem_addrb,
+        addr_b     => mem_addrb(4 downto 0),
         rd_b       => mem_readb,
         data_out_a => mem_outa,
         data_out_b => mem_outb);
@@ -190,7 +171,7 @@ begin
         nrst       => synced_nrst,
         a          => alu_a,
         b          => alu_b,
-        op         => alu_op,
+        op         => alu_op(1 downto 0),
         p          => alu_out);
 
     control : entity work.Controller
@@ -211,5 +192,24 @@ begin
         alu_selb   => alu_selb,
         mem_sel    => mem_sel,
         io_sel     => io_sel);
+
+    --control : entity work.Controller
+    --generic map (BITS => BITS)
+    --port map (
+    --    clk        => clk,
+    --    nrst       => synced_nrst,
+    --    opc        => opc,
+    --    pc         => pc,
+    --    immediate  => immediate,
+    --    mem_write  => mem_write,
+    --    mem_reada  => mem_reada,
+    --    mem_readb  => mem_readb,
+    --    mem_addra  => mem_addra,
+    --    mem_addrb  => mem_addrb,
+    --    alu_op     => alu_op,
+    --    alu_sela   => alu_sela,
+    --    alu_selb   => alu_selb,
+    --    mem_sel    => mem_sel,
+    --    io_sel     => io_sel);
 
 end architecture ; -- RTL
