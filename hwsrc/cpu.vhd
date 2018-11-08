@@ -97,47 +97,6 @@ begin
         d_in       => d_in,
         d_out      => d_out);
 
-    --opcodes : entity work.OpCode
-    --generic map (
-    --    INIT00     => SEL_IO & SEL_IMM & SEL_ZERO & SEL_ZERO &
-    --                  "000" & '0' & "00000" & ALU_ADD & "000000000" &
-    --                  X"00000001", -- calc io + 1
-    --    INIT01     => SEL_ZERO & SEL_ZERO & SEL_ALU & SEL_ZERO &
-    --                  "001" & '0' & "00000" & ALU_NOP & "000000001" &
-    --                  X"00000000", -- store in R1
-    --    INIT02     => SEL_ZERO & SEL_ZERO & SEL_ZERO & SEL_ZERO &
-    --                  "100" & '0' & "00000" & ALU_NOP & "000000001" &
-    --                  X"00000000", -- load R1
-    --    INIT03     => SEL_MEM_A & SEL_IMM & SEL_ZERO & SEL_ZERO &
-    --                  "000" & '0' & "00000" & ALU_ADD & "000000000" &
-    --                  X"00001011", -- R1 + 0b1011
-    --    INIT04     => SEL_ALU & SEL_IMM & SEL_ALU & SEL_ZERO &
-    --                  "001" & '0' & "00000" & ALU_AND & "000000010" &
-    --                  X"00000111", -- store in R2, and ans & 0b111
-    --    INIT05     => SEL_ZERO & SEL_ZERO & SEL_ALU & SEL_ALU &
-    --                  "001" & '1' & "00000" & ALU_NOP & "000000011" &
-    --                  "000000011" & "000" & X"00000", -- store in R3 and IO out
-    --    INIT06     => SEL_ZERO & SEL_ZERO & SEL_ZERO & SEL_ZERO &
-    --                  "010" & '1' & "00000" & ALU_NOP & "000000000" &
-    --                  "000000011" & "000" & X"00000", -- load R3
-    --    INIT07     => SEL_ZERO & SEL_ZERO & SEL_ZERO & SEL_MEM_B &
-    --                  "010" & '1' & "00000" & ALU_NOP & "000000000" &
-    --                  "000000010" & "000" & X"00000", -- load R2, store R3 in IO
-    --    INIT08     => SEL_ZERO & SEL_ZERO & SEL_ZERO & SEL_MEM_B &
-    --                  "010" & '1' & "00000" & ALU_NOP & "000000000" &
-    --                  "000000001" & "000" & X"00000", -- load R1, store R2 in IO
-    --    INIT09     => SEL_ZERO & SEL_ZERO & SEL_ZERO & SEL_MEM_B &
-    --                  "010" & '1' & "00000" & ALU_NOP & "000000000" &
-    --                  "000000000" & "000" & X"00000", -- load R0, store R1 in IO
-    --    INIT0A     => SEL_ZERO & SEL_ZERO & SEL_ZERO & SEL_MEM_B &
-    --                  "000" & '0' & "00000" & ALU_NOP & "000000000" &
-    --                  "000000000" & "000" & X"00000"  -- store R0 in IO
-    --)
-    --port map (
-    --    clk        => clk,
-    --    nrst       => synced_nrst,
-    --    pc         => pc,
-    --    opcode     => opc);
     opcodes : entity work.OpCode
     port map (
         clk      => clk,
@@ -145,21 +104,18 @@ begin
         pc       => pc,
         opcode   => opc);
 
-
     registers : entity work.Registers
     generic map (
-        BITS       => BITS,
-        DEPTH      => 32,
-        DEPTH_LOG  => 5
+        BITS       => BITS
     )
     port map (
         clk        => clk,
         nrst       => synced_nrst,
         data_in    => cpu_mem,
         we         => mem_write,
-        addr_a     => mem_addra(4 downto 0),
+        addr_a     => mem_addra(1 downto 0),
         rd_a       => mem_reada,
-        addr_b     => mem_addrb(4 downto 0),
+        addr_b     => mem_addrb(1 downto 0),
         rd_b       => mem_readb,
         data_out_a => mem_outa,
         data_out_b => mem_outb);
@@ -192,24 +148,5 @@ begin
         alu_selb   => alu_selb,
         mem_sel    => mem_sel,
         io_sel     => io_sel);
-
-    --control : entity work.Controller
-    --generic map (BITS => BITS)
-    --port map (
-    --    clk        => clk,
-    --    nrst       => synced_nrst,
-    --    opc        => opc,
-    --    pc         => pc,
-    --    immediate  => immediate,
-    --    mem_write  => mem_write,
-    --    mem_reada  => mem_reada,
-    --    mem_readb  => mem_readb,
-    --    mem_addra  => mem_addra,
-    --    mem_addrb  => mem_addrb,
-    --    alu_op     => alu_op,
-    --    alu_sela   => alu_sela,
-    --    alu_selb   => alu_selb,
-    --    mem_sel    => mem_sel,
-    --    io_sel     => io_sel);
 
 end architecture ; -- RTL

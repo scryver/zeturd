@@ -19,7 +19,18 @@ read_entire_file(char *filename)
     return result;
 }
 
-internal u32
+internal inline u32
+log2_up(u32 value)
+{
+    u32 bitPos = 0;
+        while ((1 << bitPos) < value)
+        {
+            ++bitPos;
+        }
+    return bitPos;
+}
+
+internal inline u32
 string_length(char *cString)
 {
     u32 length = 0;

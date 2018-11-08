@@ -24,6 +24,9 @@
 #define align_ptr_down(p, a) ((void *)align_down((uptr)(p), (a)))
 #define align_ptr_up(p, a)   ((void *)align_up((uptr)(p), (a)))
 
+#define minimum(a, b)        ((a) < (b) ? (a) : (b))
+#define maximum(a, b)        ((a) > (b) ? (a) : (b))
+
 #define U8_MAX    0xFF
 #define U16_MAX   0xFFFF
 #define U32_MAX   0xFFFFFFFF

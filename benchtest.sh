@@ -20,8 +20,8 @@ cd "$tbDir" > /dev/null
     ghdl -a "$buildDir/gen_controller.vhd"
     ghdl -a "$codeDir/io.vhd"
     ghdl -a "$buildDir/gen_opcodes.vhd"
-    ghdl -a "$codeDir/registers.vhd"
-    ghdl -a "$codeDir/cpu.vhd"
+    ghdl -a "$buildDir/gen_registers.vhd"
+    ghdl -a "$buildDir/gen_cpu.vhd"
     ghdl -a "$testDir/tb_cpu.vhd"
 
     ghdl -e tb_cpu
