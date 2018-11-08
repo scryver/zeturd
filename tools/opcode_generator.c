@@ -196,10 +196,9 @@ get_offset_immediate(OpCodeStats *stats)
 {
     u32 offset = 0;
     u32 maxImmAddr = maximum(stats->immediateBits, stats->addressBits);
-    offset = maxImmAddr;
     if (maxImmAddr > stats->immediateBits)
     {
-        offset -= stats->immediateBits;
+        offset = maxImmAddr - stats->immediateBits;
     }
     return offset;
 }
@@ -209,10 +208,9 @@ get_offset_addr_b(OpCodeStats *stats)
 {
     u32 offset = 0;
     u32 maxImmAddr = maximum(stats->immediateBits, stats->addressBits);
-    offset = maxImmAddr;
     if (maxImmAddr > stats->addressBits)
     {
-        offset -= stats->addressBits;
+        offset = maxImmAddr - stats->addressBits;
     }
     return offset;
 }
