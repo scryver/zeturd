@@ -44,10 +44,10 @@ typedef struct OpCodeBuild
     b32 memoryWrite;
     
     b32 useB;
-u32 immediate;
+    u32 immediate;
     u32 memoryAddrA;
     u32 memoryAddrB;
-    } OpCodeBuild;
+} OpCodeBuild;
 
 internal b32 opc_only_selection(OpCodeBuild *opCode)
 {
@@ -136,7 +136,7 @@ typedef union OpCode
     {
         union
         {
-            struct 
+            struct
             {
                 u64 padding     : 23;
                 u64 memoryAddrB : 9;
@@ -270,7 +270,7 @@ internal inline u32
 get_offset_sel_io(OpCodeStats *stats)
 {
     u32 offset = get_offset_mem_read_a(stats);
-        offset += 1;
+    offset += 1;
     return offset;
 }
 
@@ -370,8 +370,8 @@ print_opcode(OpCode opcode, b32 verbose)
         fprintf(stdout, "  Alu B  : %s\n", select_to_string(opcode.selectAluB));
         fprintf(stdout, "  Mem in : %s\n", select_to_string(opcode.selectMem));
         fprintf(stdout, "  IO     : %s\n", select_to_string(opcode.selectIO));
-        fprintf(stdout, "  Mem op : %s%s%s\n", 
-                opcode.memoryReadA ? "read A " : "", opcode.memoryReadB ? "read B " : "", 
+        fprintf(stdout, "  Mem op : %s%s%s\n",
+                opcode.memoryReadA ? "read A " : "", opcode.memoryReadB ? "read B " : "",
                 opcode.memoryWrite ? "| write" : (!(opcode.memoryReadA || opcode.memoryReadB) ? "none" : ""));
         fprintf(stdout, "  Use B  : %s\n", opcode.useMemoryB ? "yes" : "no");
         fprintf(stdout, "  Alu op : %s\n", alu_op_to_string(opcode.aluOperation));
@@ -448,7 +448,7 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
             i_expect(var->id->name.size);
             String idString = var->id->name;
             
-             if (strings_are_equal(idString, str_internalize_cstring("IO")))
+            if (strings_are_equal(idString, str_internalize_cstring("IO")))
             {
                 packedOp.selectAluA = Select_IO;
                 op.selectAluA = Select_IO;
@@ -464,7 +464,7 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
                 loadOp.memoryReadA = true;
                 loadOp.memoryAddrA = regLoc;
                 op.selectAluA = Select_MemoryA;
-                                     }
+            }
         }
         else
         {
@@ -574,24 +574,24 @@ push_assignment(Assignment *assign, OpCode **opCodes, OpCodeBuild **opCodeBuilds
     if (strings_are_equal(idString, str_internalize_cstring("IO")))
     {
         packedStore.selectIO = Select_Alu;
-    store.selectIO = Select_Alu;
-        }
+        store.selectIO = Select_Alu;
+    }
     else
     {
         u32 regLoc = get_register_location(idString);
         
         packedStore.selectMem = Select_Alu;
-    packedStore.memoryWrite = true;
+        packedStore.memoryWrite = true;
         packedStore.memoryAddrA = regLoc;
         
         store.selectMem = Select_Alu;
         store.memoryWrite = true;
         store.memoryAddrA = regLoc;
-        }
+    }
     
     buf_push(*opCodes, packedStore);
-buf_push(*opCodeBuilds, store);
-    }
+    buf_push(*opCodeBuilds, store);
+}
 
 internal void
 optimize_assignments(OpCode **opCodes, OpCodeBuild **opCodeBuilds)
@@ -609,8 +609,8 @@ optimize_assignments(OpCode **opCodes, OpCodeBuild **opCodeBuilds)
         if (opc_only_selection(&cur))
         {
             // NOTE(michiel): Only selection is set for cur
-            if (opc_only_selection(&prev) && 
-                prev.selectAluA && !prev.selectAluB && 
+            if (opc_only_selection(&prev) &&
+                prev.selectAluA && !prev.selectAluB &&
                 !prev.selectMem && !prev.selectIO)
             {
                 // NOTE(michiel): Only alu A selection with a alu no-op for prev
@@ -630,7 +630,7 @@ optimize_assignments(OpCode **opCodes, OpCodeBuild **opCodeBuilds)
                     packedPrev.selectMem = packedPrev.selectAluA;
                     prev.selectMem = prev.selectAluA;
                 }
-                else 
+                else
                 {
                     i_expect(cur.selectIO);
                     packedPrev.selectIO = packedPrev.selectAluA;
@@ -673,33 +673,33 @@ optimize_read_setups(OpCode **opCodes, OpCodeBuild **opCodeBuilds)
         
         if (cur.memoryReadA && !cur.memoryReadB && !cur.memoryWrite &&
             ((!cur.selectAluA && !cur.selectAluB &&
-             !cur.selectMem && !cur.selectIO) ||
+              !cur.selectMem && !cur.selectIO) ||
              (((cur.selectAluA == Select_Alu) &&
-              !cur.selectAluB && !cur.selectMem && !cur.selectIO) &&
+               !cur.selectAluB && !cur.selectMem && !cur.selectIO) &&
               (cur.aluOperation == Alu_Noop))))
         {
             // NOTE(michiel): Read setup for mem A
             
-    if (!prev.memoryReadA && !prev.memoryReadB && !prev.memoryWrite)
+            if (!prev.memoryReadA && !prev.memoryReadB && !prev.memoryWrite)
             {
                 // NOTE(michiel): If previous doesn't use memory
                 packedPrev.memoryReadA = packedCur.memoryReadA;
-        packedPrev.memoryAddrA = packedCur.memoryAddrA;
-        
-        prev.memoryReadA = cur.memoryReadA;
-        prev.memoryAddrA = cur.memoryAddrA;
+                packedPrev.memoryAddrA = packedCur.memoryAddrA;
+                
+                prev.memoryReadA = cur.memoryReadA;
+                prev.memoryAddrA = cur.memoryAddrA;
                 
                 for (u32 popIdx = opIdx; popIdx < opCodeCount - 1; ++popIdx)
                 {
-            (*opCodes)[popIdx] = (*opCodes)[popIdx + 1];
-            (*opCodeBuilds)[popIdx] = (*opCodeBuilds)[popIdx + 1];
-        }
-        --buf_len_(*opCodes);
+                    (*opCodes)[popIdx] = (*opCodes)[popIdx + 1];
+                    (*opCodeBuilds)[popIdx] = (*opCodeBuilds)[popIdx + 1];
+                }
+                --buf_len_(*opCodes);
                 --buf_len_(*opCodeBuilds);
                 --opCodeCount;
                 --opIdx;
-        (*opCodes)[opIdx] = packedPrev;
-        (*opCodeBuilds)[opIdx] = prev;
+                (*opCodes)[opIdx] = packedPrev;
+                (*opCodeBuilds)[opIdx] = prev;
             }
             else if (prev.memoryWrite && !prev.memoryReadA && !prev.memoryReadB &&
                      (prev.memoryAddrA == cur.memoryAddrA))
@@ -708,52 +708,52 @@ optimize_read_setups(OpCode **opCodes, OpCodeBuild **opCodeBuilds)
                 
                 if (opIdx < (opCodeCount - 1))
                 {
-            OpCodeBuild next = (*opCodeBuilds)[opIdx + 1];
-            OpCode packedNext = (*opCodes)[opIdx + 1];
+                    OpCodeBuild next = (*opCodeBuilds)[opIdx + 1];
+                    OpCode packedNext = (*opCodes)[opIdx + 1];
                     
                     if ((next.selectAluA == Select_MemoryA) ||
                         (next.selectAluB == Select_MemoryA) ||
                         (next.selectMem == Select_MemoryA) ||
                         (next.selectIO == Select_MemoryA))
                     {
-                    if (next.selectAluA == Select_MemoryA)
-                    {
-                    packedNext.selectAluA = Select_Alu;
-                    next.selectAluA = Select_Alu;
+                        if (next.selectAluA == Select_MemoryA)
+                        {
+                            packedNext.selectAluA = Select_Alu;
+                            next.selectAluA = Select_Alu;
                         }
                         else if (next.selectAluB == Select_MemoryA)
                         {
-                    packedNext.selectAluB = Select_Alu;
-                    next.selectAluB = Select_Alu;
-                            }
+                            packedNext.selectAluB = Select_Alu;
+                            next.selectAluB = Select_Alu;
+                        }
                         else if (next.selectMem == Select_MemoryA)
                         {
-                    packedNext.selectMem = Select_Alu;
-                    next.selectMem = Select_Alu;
+                            packedNext.selectMem = Select_Alu;
+                            next.selectMem = Select_Alu;
                         }
                         else
                         {
                             i_expect(next.selectIO == Select_MemoryA);
-                    packedNext.selectIO = Select_Alu;
-                    next.selectIO = Select_Alu;
+                            packedNext.selectIO = Select_Alu;
+                            next.selectIO = Select_Alu;
                         }
                         
                         packedPrev.selectAluA = Select_Alu;
-                prev.selectAluA = Select_Alu;
-                
+                        prev.selectAluA = Select_Alu;
+                        
                         for (u32 popIdx = opIdx; popIdx < opCodeCount - 1; ++popIdx)
-                {
-                    (*opCodes)[popIdx] = (*opCodes)[popIdx + 1];
+                        {
+                            (*opCodes)[popIdx] = (*opCodes)[popIdx + 1];
                             (*opCodeBuilds)[popIdx] = (*opCodeBuilds)[popIdx + 1];
                         }
-                --buf_len_(*opCodes);
-                --buf_len_(*opCodeBuilds);
+                        --buf_len_(*opCodes);
+                        --buf_len_(*opCodeBuilds);
                         --opCodeCount;
                         --opIdx;
                         (*opCodes)[opIdx] = packedPrev;
-                (*opCodes)[opIdx + 1] = packedNext;
-                (*opCodeBuilds)[opIdx] = prev;
-                (*opCodeBuilds)[opIdx + 1] = next;
+                        (*opCodes)[opIdx + 1] = packedNext;
+                        (*opCodeBuilds)[opIdx] = prev;
+                        (*opCodeBuilds)[opIdx + 1] = next;
                     }
                 }
             }
@@ -852,8 +852,8 @@ int main(int argc, char **argv)
             else
             {
                 i_expect(statement->kind == STATEMENT_EXPR);
-                // NOTE(michiel): We expect single tweakable things here. All other 
-                 // usefull statements are assignments
+                // NOTE(michiel): We expect single tweakable things here. All other
+                // usefull statements are assignments
                 
                 if (statement->expr->leftKind == EXPRESSION_VAR)
                 {
@@ -871,19 +871,262 @@ int main(int argc, char **argv)
                 }
             }
         }
-        
-        //fprintf(stdout, "Pre Opcodes: %u\n", buf_len(opCodes));
-        optimize_assignments(&opCodes, &opCodeBuilds);
+
+optimize_assignments(&opCodes, &opCodeBuilds);
         optimize_read_setups(&opCodes, &opCodeBuilds);
         optimize_combine_write(&opCodes, &opCodeBuilds);
-        //fprintf(stdout, "Post Opcodes: %u\n", buf_len(opCodes));
-        
-#if 0
+
+#if 1
         for (u32 opIdx = 0; opIdx < buf_len(opCodes); ++opIdx)
         {
             OpCode opCode = opCodes[opIdx];
             print_opcode(opCode, true);
         }
+        
+        FileStream graphicStream = {0};
+        graphicStream.file = fopen("opcodes.dot", "wb");
+        
+        fprintf(graphicStream.file, "digraph opcodes {\n");
+        fprintf(graphicStream.file, "  ranksep=.75;\n");
+        
+        for (u32 regIdx = 0; regIdx < gRegisterCount; ++regIdx)
+        {
+            fprintf(graphicStream.file, "    mem%d [shape=record, label=\"{ <in>in | mem[%d] | {<a>a|<b>b} }\"];\n", regIdx, regIdx);
+        }
+        
+        #define LAYER_HAS_MEMA 0x001
+        #define LAYER_HAS_MEMB 0x002
+        #define LAYER_HAS_IMM  0x004
+        #define LAYER_HAS_IOIN 0x008
+        #define LAYER_HAS_IOUT 0x010
+        #define LAYER_HAS_ALU  0x020
+#define LAYER_HAS_MEMI 0x100
+#define LAYER_HAS_MEMW 0x200
+        u32 nextLayerHas = 0;
+        for (u32 opIdx = 0; opIdx < buf_len(opCodeBuilds); ++opIdx)
+        {
+            OpCodeBuild opCode = opCodeBuilds[opIdx];
+            
+            u32 layerHas = nextLayerHas;
+            nextLayerHas = 0;
+            
+            switch (opCode.selectIO)
+            {
+                case Select_Zero: {
+                    //fprintf(graphicStream.file, "    ZERO%03d -> ioOut%03d\n",
+                            //opIdx, opIdx + 1);
+                } break;
+                case Select_MemoryA: {
+                    fprintf(graphicStream.file, "    memA%03d -> ioOut%03d\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_MEMA | LAYER_HAS_IOUT;
+                } break;
+                case Select_MemoryB: {
+                    fprintf(graphicStream.file, "    memB%03d -> ioOut%03d\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_MEMB | LAYER_HAS_IOUT;
+                } break;
+                case Select_Immediate: {
+                    fprintf(graphicStream.file, "    imm%03d -> ioOut%03d\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_IMM | LAYER_HAS_IOUT;
+                } break;
+                case Select_IO: {
+                    fprintf(graphicStream.file, "    ioIn%03d -> ioOut%03d\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_IOIN | LAYER_HAS_IOUT;
+                } break;
+                case Select_Alu: {
+                    fprintf(graphicStream.file, "    alu%03d:out -> ioOut%03d\n",
+                            opIdx - 1, opIdx);
+                    layerHas |= LAYER_HAS_IOUT;
+                } break;
+                INVALID_DEFAULT_CASE;
+            }
+            switch (opCode.selectMem)
+            {
+                case Select_Zero: {
+                    //fprintf(graphicStream.file, "    ZERO%03d -> memIn%03d\n",
+                            //opIdx, opIdx);
+                } break;
+                case Select_MemoryA: {
+                    fprintf(graphicStream.file, "    memA%03d -> memIn%03d\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_MEMA | LAYER_HAS_MEMI;
+                } break;
+                case Select_MemoryB: {
+                    fprintf(graphicStream.file, "    memB%03d -> memIn%03d\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_MEMB | LAYER_HAS_MEMI;
+                } break;
+                case Select_Immediate: {
+                    fprintf(graphicStream.file, "    imm%03d -> memIn%03d\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_IMM | LAYER_HAS_MEMI;
+                } break;
+                case Select_IO: {
+                    fprintf(graphicStream.file, "    ioIn%03d -> memIn%03d\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_IOIN | LAYER_HAS_MEMI;
+                } break;
+                case Select_Alu: {
+                    fprintf(graphicStream.file, "    alu%03d:out -> memIn%03d\n",
+                            opIdx - 1, opIdx);
+                    layerHas |= LAYER_HAS_MEMI;
+                } break;
+                INVALID_DEFAULT_CASE;
+            }
+            switch (opCode.selectAluA)
+            {
+                case Select_Zero: {
+                    //fprintf(graphicStream.file, "    ZERO%03d -> aluA%03d\n",
+                            //opIdx - 1, opIdx);
+                } break;
+                case Select_MemoryA: {
+                    fprintf(graphicStream.file, "    memA%03d -> alu%03d:a\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_MEMA;
+                } break;
+                case Select_MemoryB: {
+                    fprintf(graphicStream.file, "    memB%03d -> alu%03d:a\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_MEMB;
+                } break;
+                case Select_Immediate: {
+                    fprintf(graphicStream.file, "    imm%03d -> alu%03d:a\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_IMM;
+                } break;
+                case Select_IO: {
+                    fprintf(graphicStream.file, "    ioIn%03d -> alu%03d:a\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_IOIN;
+                } break;
+                case Select_Alu: {
+                    fprintf(graphicStream.file, "    alu%03d:out -> alu%03d:a\n",
+                            opIdx - 1, opIdx);
+                } break;
+                INVALID_DEFAULT_CASE;
+            }
+            switch (opCode.selectAluB)
+            {
+                case Select_Zero: {
+                    //fprintf(graphicStream.file, "    ZERO%03d -> aluB%03d\n",
+                            //opIdx - 1, opIdx);
+                } break;
+                case Select_MemoryA: {
+                    fprintf(graphicStream.file, "    memA%03d -> alu%03d:b\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_MEMA;
+                } break;
+                case Select_MemoryB: {
+                    fprintf(graphicStream.file, "    memB%03d -> alu%03d:b\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_MEMB;
+                } break;
+                case Select_Immediate: {
+                    fprintf(graphicStream.file, "    imm%03d -> alu%03d:b\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_IMM;
+                } break;
+                case Select_IO: {
+                    fprintf(graphicStream.file, "    ioIn%03d -> alu%03d:b\n",
+                            opIdx, opIdx);
+                    layerHas |= LAYER_HAS_IOIN;
+                } break;
+                case Select_Alu: {
+                    fprintf(graphicStream.file, "    alu%03d:out -> alu%03d:b\n",
+                            opIdx - 1, opIdx);
+                } break;
+                INVALID_DEFAULT_CASE;
+            }
+            
+            if (opCode.selectAluA || opCode.selectAluB || (layerHas & LAYER_HAS_ALU))
+            {
+                char *aluOp = "";
+                switch (opCode.aluOperation)
+                {
+                    case Alu_Noop: { aluOp = ""; } break;
+                    case Alu_And: { aluOp = "and"; } break;
+                    case Alu_Or: { aluOp = "or"; } break;
+                    case Alu_Add: { aluOp = "add"; } break;
+                    INVALID_DEFAULT_CASE;
+                }
+                fprintf(graphicStream.file, "    alu%03d [shape=record, label=\"{ {<a>a|<b>b} | %s[%03d] | <out>out}\"];\n", opIdx, aluOp, opIdx);
+                if (opCode.selectAluA || opCode.selectAluB)
+                {
+                nextLayerHas |= LAYER_HAS_ALU;
+                }
+            layerHas |= LAYER_HAS_ALU;
+                }
+            
+            if (opCode.memoryReadA)
+            {
+                fprintf(graphicStream.file, "    mem%d:a -> loadA%03d -> memA%03d\n",
+                        opCode.memoryAddrA, opIdx, opIdx + 1);
+                nextLayerHas |= LAYER_HAS_MEMA;
+            }
+            if (opCode.memoryReadB)
+            {
+                fprintf(graphicStream.file, "    mem%d:b -> loadB%03d -> memB%03d\n",
+                        opCode.memoryAddrB, opIdx, opIdx + 1);
+                nextLayerHas |= LAYER_HAS_MEMB;
+            }
+            if (opCode.memoryWrite)
+            {
+                fprintf(graphicStream.file, "    memIn%03d -> write%03d -> mem%d:in\n",
+                        opIdx, opIdx + 1, opCode.memoryAddrA);
+                nextLayerHas |= LAYER_HAS_MEMW;
+            }
+            
+            
+            fprintf(graphicStream.file, "      { rank = same; ");
+            if (layerHas & LAYER_HAS_MEMA)
+            {
+                fprintf(graphicStream.file, "memA%03d; ", opIdx);
+            }
+            if (layerHas & LAYER_HAS_MEMB)
+            {
+                fprintf(graphicStream.file, "memB%03d; ", opIdx);
+            }
+            if (layerHas & LAYER_HAS_MEMI)
+            {
+                fprintf(graphicStream.file, "memIn%03d; ", opIdx);
+            }
+            
+            if (nextLayerHas & LAYER_HAS_MEMA)
+            {
+                fprintf(graphicStream.file, "loadA%03d; ", opIdx);
+            }
+            if (nextLayerHas & LAYER_HAS_MEMB)
+            {
+                fprintf(graphicStream.file, "loadB%03d; ", opIdx);
+            }
+            if (layerHas & LAYER_HAS_MEMW)
+            {
+                fprintf(graphicStream.file, "write%03d; ", opIdx);
+            }
+            if (layerHas & LAYER_HAS_IMM)
+            {
+                fprintf(graphicStream.file, "imm%03d; ", opIdx);
+            }
+            if (layerHas & LAYER_HAS_IOIN)
+            {
+                fprintf(graphicStream.file, "ioIn%03d; ", opIdx);
+            }
+            if (layerHas & LAYER_HAS_IOUT)
+            {
+                fprintf(graphicStream.file, "ioOut%03d; ", opIdx);
+            }
+            if (layerHas & LAYER_HAS_ALU)
+            {
+                //fprintf(graphicStream.file, "alu%03d; ", opIdx);
+            }
+            fprintf(graphicStream.file, "};\n");
+        }
+        fprintf(graphicStream.file, "}\n");
+        
+        fclose(graphicStream.file);
 #else
         OpCodeStats opCodeStats = get_opcode_stats(buf_len(opCodeBuilds), opCodeBuilds);
         fprintf(stdout, "Stats:\n");
