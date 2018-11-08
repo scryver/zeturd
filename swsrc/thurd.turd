@@ -1,0 +1,8 @@
+SYNCED
+X = IO + 1
+Y = X + 0b1011
+Z = Y & 0x7
+IO = Z
+IO = Y + 1
+IO = X
+IO = 11 + X + Y

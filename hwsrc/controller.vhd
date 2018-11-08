@@ -4,12 +4,14 @@ use IEEE.numeric_std.all;
 
 entity Controller is
     generic (
-        BITS : integer := 8
+        BITS : integer := 8;
+        SYNCED : boolean := FALSE
     );
     port (
         clk       : in  std_logic;
         nrst      : in  std_logic;
 
+        io_rdy    : in  std_logic;
         opc       : in  std_logic_vector(63 downto 0);
 
         pc        : out std_logic_vector(5 downto 0);
@@ -71,16 +73,43 @@ begin
     mem_sel   <= opc(MEM_START   downto IO_START + 1);
     io_sel    <= opc(IO_START    downto MEM_A_RD + 1);
 
-    fsm_clk : process(clk)
+    gen_async : if (SYNCED = FALSE) generate
     begin
-        if (clk'event and clk = '1') then
-            if (nrst = '0') then
-                pc_counter <= (others => '0');
-            else
-                pc_counter <= pc_counter + 1;
+        fsm_clk : process(clk)
+        begin
+            if (clk'event and clk = '1') then
+                if (nrst = '0') then
+                    pc_counter <= (others => '0');
+                else
+                    if (pc_counter < 13) then
+                        pc_counter <= pc_counter + 1;
+                    else
+                        pc_counter <= (others => '0');
+                    end if;
+                end if;
             end if;
-        end if;
-    end process;
+        end process;
+    end generate;
+
+    gen_sync : if (SYNCED = TRUE) generate
+    begin
+        fsm_clk : process(clk)
+        begin
+            if (clk'event and clk = '1') then
+                if (nrst = '0') then
+                    pc_counter <= (others => '0');
+                else
+                    if (pc_counter = 0) and (io_rdy = '1') then
+                        pc_counter <= pc_counter + 1;
+                    elsif (pc_counter /= 0) and (pc_counter < 13) then
+                        pc_counter <= pc_counter + 1;
+                    else
+                        pc_counter <= (others => '0');
+                    end if;
+                end if;
+            end if;
+        end process;
+    end generate;
 
     alu_op_int    <= opc(ALU_OP_START downto MEM_A_START + 1);
     mem_addra_int <= opc(MEM_A_START downto MEM_B_START + 1);

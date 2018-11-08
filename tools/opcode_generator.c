@@ -110,6 +110,8 @@ internal u32 opc_max_address(u32 opCount, OpCodeBuild *opCodes)
 
 typedef struct OpCodeStats
 {
+    b32 synced;
+    
     u32 bitWidth;
     
     u32 maxSelect;
@@ -395,14 +397,15 @@ get_opcode_stats(u32 opCount, OpCodeBuild *opCodes)
 {
     OpCodeStats result = {0};
     
-    result.maxSelect = Select_Count;
-    result.selectBits = log2_up(Select_Count);
-    result.maxAluOp = Alu_Count;
-    result.aluOpBits = log2_up(Alu_Count);
+    result.maxSelect = Select_Count - 1;
+    result.selectBits = log2_up(result.maxSelect);
+    result.maxAluOp = Alu_Count - 1;
+    result.aluOpBits = log2_up(result.maxAluOp);
     result.maxImmediate = opc_max_immediate(opCount, opCodes);
     result.immediateBits = log2_up(result.maxImmediate);
     result.maxAddress = opc_max_address(opCount, opCodes);
     result.addressBits = log2_up(result.maxAddress);
+    fprintf(stdout, "Max addr: %u, addr bits: %u\n", result.maxAddress, result.addressBits);
     
     result.opCodeCount = opCount;
     result.opCodeBits = log2_up(opCount);
@@ -445,7 +448,7 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
             i_expect(var->id->name.size);
             String idString = var->id->name;
             
-            if (strings_are_equal(idString, str_internalize_cstring("IO")))
+             if (strings_are_equal(idString, str_internalize_cstring("IO")))
             {
                 packedOp.selectAluA = Select_IO;
                 op.selectAluA = Select_IO;
@@ -833,6 +836,8 @@ int main(int argc, char **argv)
         OpCode *opCodes = 0;
         OpCodeBuild *opCodeBuilds = 0;
         
+        b32 synced = false;
+        
         // print_tokens(tokens);
         print_parsed_program(outputStream, program);
         
@@ -847,7 +852,23 @@ int main(int argc, char **argv)
             else
             {
                 i_expect(statement->kind == STATEMENT_EXPR);
-                push_expression(statement->expr, &opCodes, &opCodeBuilds);
+                // NOTE(michiel): We expect single tweakable things here. All other 
+                 // usefull statements are assignments
+                
+                if (statement->expr->leftKind == EXPRESSION_VAR)
+                {
+                    Variable *var = statement->expr->left;
+                    if (var->kind == VARIABLE_IDENTIFIER)
+                    {
+                        i_expect(var->id->name.size);
+                        String idString = var->id->name;
+                        
+                        if (strings_are_equal(idString, str_internalize_cstring("SYNCED")))
+                        {
+                            synced = true;
+                        }
+                    }
+                }
             }
         }
         
@@ -871,11 +892,11 @@ int main(int argc, char **argv)
         fprintf(stdout, "  IMM: Max = %u, Bits = %u\n", opCodeStats.maxImmediate, opCodeStats.immediateBits);
         fprintf(stdout, "  ADR: Max = %u, Bits = %u\n", opCodeStats.maxAddress, opCodeStats.addressBits);
         
+        opCodeStats.synced = synced;
         opCodeStats.bitWidth = 8;
         
         FileStream opCodeStream = {0};
         opCodeStream.file = fopen("gen_opcodes.vhd", "wb");
-        //generate_opcode_vhdl_(opCodes, opCodeStream);
         generate_opcode_vhdl(&opCodeStats, opCodeBuilds, opCodeStream);
         fclose(opCodeStream.file);
         

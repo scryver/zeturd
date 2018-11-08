@@ -23,7 +23,7 @@ internal inline u32
 log2_up(u32 value)
 {
     u32 bitPos = 0;
-        while ((1 << bitPos) < value)
+        while ((1 << bitPos) <= value)
         {
             ++bitPos;
         }

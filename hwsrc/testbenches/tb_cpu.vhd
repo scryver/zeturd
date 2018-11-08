@@ -14,6 +14,7 @@ architecture Testing of tb_cpu is
     signal eos       : std_logic := '0'; -- End Of Simulation
 
     signal clk, nrst : std_logic;
+    signal load, rdy : std_logic;
     signal din, dout : std_logic_vector(BITS - 1 downto 0);
 
 begin
@@ -23,7 +24,9 @@ begin
     port map (
         clk => clk,
         nrst => nrst,
+        load => load,
         d_in => din,
+        ready => rdy,
         d_out => dout);
 
     clking : process -- clock process
@@ -42,13 +45,19 @@ begin
     begin
         nrst <= '0';
         din <= (others => '0');
+        load <= '0';
 
         wait until clk = '0';
         wait for 3 * TIME_DELTA;
         din <= X"12";
         wait for 5 * TIME_DELTA;
         nrst <= '1';
-        wait for TIME_DELTA * 120;
+        wait for 2 * TIME_DELTA;
+        load <= '1';
+        wait for 20 * TIME_DELTA;
+        din <= X"51";
+        load <= '0';
+        wait for 30 * TIME_DELTA;
 
         eos <= '1';
         wait;

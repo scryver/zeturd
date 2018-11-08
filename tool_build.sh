@@ -16,6 +16,6 @@ mkdir -p "$buildDir"
 pushd "$buildDir" > /dev/null
 
 clang $flags $exceptions "$codeDir/opcode_generator.c" -o opcode-gen
-./opcode-gen "$swDir/first_test.turd"
+./opcode-gen "$swDir/thurd.turd"
 
 popd > /dev/null
