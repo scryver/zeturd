@@ -81,7 +81,7 @@ generate_constants(OpCodeStats *stats, FileStream output)
 #undef PRINT_CONSTANT
 
 internal void
-generate_opcode_vhdl(OpCodeStats *stats, OpCodeBuild *opCodes, FileStream output)
+generate_opcode_vhdl(OpCodeStats *stats, OpCode *opCodes, FileStream output)
 {
     generate_vhdl_header(output);
     
@@ -269,7 +269,11 @@ generate_registers(OpCodeStats *stats, FileStream output)
     fprintf(output.file, "            else\n");
     fprintf(output.file, "                -- Read\n");
     fprintf(output.file, "                if (rd_a = '1') then\n");
-    fprintf(output.file, "                    out_a <= ram_mem(to_integer(unsigned(addr_a)));\n");
+    //fprintf(output.file, "                    if (we = '1') then\n");
+    //fprintf(output.file, "                        out_a <= data_in;\n");
+    //fprintf(output.file, "                    else\n");
+    fprintf(output.file, "                        out_a <= ram_mem(to_integer(unsigned(addr_a)));\n");
+    //fprintf(output.file, "                    end if;\n");
     fprintf(output.file, "                else\n");
     fprintf(output.file, "                    out_a <= (others => '0');\n");
     fprintf(output.file, "                end if;\n");
@@ -289,9 +293,25 @@ generate_registers(OpCodeStats *stats, FileStream output)
 }
 
 #define PRINT_OPTION(name, type) fprintf(output.file, "        %s when %s,\n", name, #type)
+#define PRINT_CASE_OPTION(name, assign, type) fprintf(output.file, "                when %s => %s <= %s;\n", #type, assign, name);
 internal void
 generate_select_statement_(char *name, char *selName, FileStream output)
 {
+    #if 0
+    fprintf(output.file, "    proc_%s : process(clk)\n", name);
+    fprintf(output.file, "    begin\n");
+    fprintf(output.file, "        if (clk'event and clk = '1') then\n");
+    fprintf(output.file, "            case (%s) is\n", selName);
+    PRINT_CASE_OPTION("mem_outa ", name, Select_MemoryA);
+    PRINT_CASE_OPTION("mem_outb ", name, Select_MemoryB);
+    PRINT_CASE_OPTION("immediate", name, Select_Immediate);
+    PRINT_CASE_OPTION("io_cpu   ", name, Select_IO);
+    PRINT_CASE_OPTION("alu_trunc", name, Select_Alu);
+    PRINT_CASE_OPTION("(others => '0')", name, others);
+    fprintf(output.file, "            end case;\n");
+    fprintf(output.file, "        end if;\n");
+    fprintf(output.file, "    end process;\n\n");
+    #else
     fprintf(output.file, "    with %s select %s <=\n", selName, name);
     PRINT_OPTION("mem_outa ", Select_MemoryA);
     PRINT_OPTION("mem_outb ", Select_MemoryB);
@@ -299,8 +319,10 @@ generate_select_statement_(char *name, char *selName, FileStream output)
     PRINT_OPTION("io_cpu   ", Select_IO);
     PRINT_OPTION("alu_trunc", Select_Alu);
     fprintf(output.file, "        (others => '0') when others;\n\n");
+    #endif
 }
-#undef PRINT_OPTION
+            #undef PRINT_CASE_OPTION
+            #undef PRINT_OPTION
 
 #define CSTR_(x) #x
 #define CSTR(x) CSTR_(x)

@@ -1,28 +1,17 @@
 typedef enum TokenKind
 {
     TOKEN_NULL,
-    TOKEN_NUMBER,
+    
+    TOKEN_NUMBER = 128,
     TOKEN_ID,
     TOKEN_INC,
     TOKEN_DEC,
-    TOKEN_NOT,
-    TOKEN_INV,
-    TOKEN_MUL,
-    TOKEN_DIV,
-    TOKEN_AND,
+
     TOKEN_SLL,
     TOKEN_SRL,
     TOKEN_SRA,
-    TOKEN_SUB,
-    TOKEN_ADD,
-    TOKEN_OR,
-    TOKEN_XOR,
-    TOKEN_PAREN_OPEN,
-    TOKEN_PAREN_CLOSE,
-    TOKEN_ASSIGN,
-    TOKEN_SEMI,
-    TOKEN_EOL,
-    TOKEN_EOF,
+
+TOKEN_EOF,
 
     NUM_TOKENS, // NOTE(michiel): Always at the end of the enum to indicate how many tokens we have.
 } TokenKind;

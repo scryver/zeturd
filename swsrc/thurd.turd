@@ -1,8 +1,8 @@
 SYNCED
 X = IO + 1
 IO = X
-Y = IO + 2
-IO = Y
+Y = IO + 2 + 4 + X
+IO = Y 
 Z = X & Y
 IO = Z
 W = X + Y

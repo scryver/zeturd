@@ -5,11 +5,49 @@ advance(TokenEater *eater)
     ++eater->columnNumber;
 }
 
-#define SIMPLE_TOKEN(type) token = next_token(result, tokenIndex++); \
-    token->kind = TOKEN_##type; \
+#define CASE1(t1) case t1: { \
+    token = next_token(result, tokenIndex++); \
+    token->kind = t1; \
     token->value = str_internalize((String){.size=1, .data= (u8 *)eater.scanner}); \
     token->colNumber = eater.columnNumber; \
-    advance(&eater)
+    advance(&eater); \
+} break
+
+#define CASE2(t1, t2, k2) case t1: { \
+    token = next_token(result, tokenIndex++); \
+    String value = { .size = 1, .data = (u8 *)eater.scanner }; \
+    token->kind = t1; \
+    token->colNumber = eater.columnNumber; \
+    advance(&eater); \
+    if (eater.scanner[0] && (eater.scanner[0] == t2)) \
+    { \
+        ++value.size; \
+        token->kind = k2; \
+        advance(&eater); \
+    } \
+    token->value = str_internalize(value); \
+} break
+
+#define CASE3(t1, t2, k2, t3, k3) case t1: { \
+    token = next_token(result, tokenIndex++); \
+    String value = { .size = 1, .data = (u8 *)eater.scanner }; \
+    token->kind = t1; \
+    token->colNumber = eater.columnNumber; \
+    advance(&eater); \
+    if (eater.scanner[0] && (eater.scanner[0] == t2)) \
+    { \
+        ++value.size; \
+        token->kind = k2; \
+        advance(&eater); \
+        if (eater.scanner[0] && (eater.scanner[0] == t3)) \
+        { \
+            ++value.size; \
+            token->kind = k3; \
+            advance(&eater); \
+        } \
+    } \
+    token->value = str_internalize(value); \
+} break
 
 internal Token *
 tokenize(Buffer buffer, String filename)
@@ -24,141 +62,45 @@ tokenize(Buffer buffer, String filename)
     while (*eater.scanner)
     {
         Token *token = NULL;
-        if ((eater.scanner[0] == ' ') ||
-            (eater.scanner[0] == '\r') ||
-            (eater.scanner[0] == '\t'))
+        switch (eater.scanner[0])
+        {
+            case ' ':
+            case '\r':
+            case '\t':
         {
             // NOTE(michiel): Skip these
             advance(&eater);
-        }
-        else if (eater.scanner[0] == '\n')
-        {
-            SIMPLE_TOKEN(EOL);
-        }
-        else if (eater.scanner[0] == ';')
-        {
-            SIMPLE_TOKEN(SEMI);
-        }
-        else if (eater.scanner[0] == '=')
-        {
-            SIMPLE_TOKEN(ASSIGN);
-        }
-        else if (eater.scanner[0] == '(')
-        {
-            SIMPLE_TOKEN(PAREN_OPEN);
-        }
-        else if (eater.scanner[0] == ')')
-        {
-            SIMPLE_TOKEN(PAREN_CLOSE);
-        }
-        else if (eater.scanner[0] == '!')
-        {
-            SIMPLE_TOKEN(NOT);
-        }
-        else if (eater.scanner[0] == '~')
-        {
-            SIMPLE_TOKEN(INV);
-        }
-        else if (eater.scanner[0] == '*')
-        {
-            SIMPLE_TOKEN(MUL);
-        }
-        else if (eater.scanner[0] == '/')
-        {
-            SIMPLE_TOKEN(DIV);
-        }
-        else if (eater.scanner[0] == '&')
-        {
-            SIMPLE_TOKEN(AND);
-        }
-        else if (eater.scanner[0] == '<')
-        {
-            if (eater.scanner[1] && (eater.scanner[1] == '<'))
-            {
-                // NOTE(michiel): >> == Logical right shift
-                token = next_token(result, tokenIndex++);
-                token->value = str_internalize((String){.size=2, .data=(u8 *)eater.scanner});
-                token->kind = TOKEN_SLL;
-                token->colNumber = eater.columnNumber;
-                advance(&eater);
-                advance(&eater);
-            }
-            else
-            {
-                fprintf(stderr, "Incomplete shift left operator\n");
-                advance(&eater);
-            }
-        }
-        else if (eater.scanner[0] == '>')
-        {
-            if (eater.scanner[1] && (eater.scanner[1] == '>'))
-            {
-                // NOTE(michiel): >> == Logical right shift
-                token = next_token(result, tokenIndex++);
-                String value = {
-                    .size = 2,
-                    .data = (u8 *)eater.scanner,
-                };
-                token->kind = TOKEN_SRA;
-                token->colNumber = eater.columnNumber;
-                if (eater.scanner[2] && (eater.scanner[2] == '>'))
-                {
-                    // NOTE(michiel): >>> == Logical right shift
-                    ++value.size;
-                    token->kind = TOKEN_SRL;
-                    advance(&eater);
-                }
-                token->value = str_internalize(value);
-                advance(&eater);
-                advance(&eater);
-            }
-            else
-            {
-                fprintf(stderr, "Incomplete shift right operator\n");
-                advance(&eater);
-            }
-        }
-        else if (eater.scanner[0] == '-')
-        {
-            if (eater.scanner[1] && (eater.scanner[1] == '-'))
-            {
-                token = next_token(result, tokenIndex++);
-                token->value = str_internalize((String){.size=2, .data=(u8 *)eater.scanner});
-                token->kind = TOKEN_DEC;
-                token->colNumber = eater.columnNumber;
-                advance(&eater);
-                advance(&eater);
-            }
-            else
-            {
-                SIMPLE_TOKEN(SUB);
-            }
-        }
-        else if (eater.scanner[0] == '+')
-        {
-            if (eater.scanner[1] && (eater.scanner[1] == '+'))
-            {
-                token = next_token(result, tokenIndex++);
-                token->value = str_internalize((String){.size=2, .data=(u8 *)eater.scanner});
-                token->kind = TOKEN_INC;
-                token->colNumber = eater.columnNumber;
-                advance(&eater);
-                advance(&eater);
-            }
-            else
-            {
-                SIMPLE_TOKEN(ADD);
-            }
-        }
-        else if (eater.scanner[0] == '|')
-        {
-            SIMPLE_TOKEN(OR);
-        }
-        else if (eater.scanner[0] == '^')
-        {
-            SIMPLE_TOKEN(XOR);
-        }
-        else if (('0' <= eater.scanner[0]) && (eater.scanner[0] <= '9'))
+            } break;
+            
+            CASE1('\n');
+            CASE1(';');
+            CASE1('=');
+            CASE1('(');
+            CASE1(')');
+            CASE1('!');
+            CASE1('~');
+            CASE1('*');
+            CASE1('/');
+            CASE1('&');
+            CASE1('|');
+            CASE1('^');
+            
+            CASE2('-', '-', TOKEN_DEC);
+            CASE2('+', '+', TOKEN_INC);
+            
+            CASE2('<', '<', TOKEN_SLL);
+            CASE3('>', '>', TOKEN_SRA, '>', TOKEN_SRL);
+            
+            case '0':
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7':
+            case '8':
+            case '9':
         {
             token = next_token(result, tokenIndex++);
             token->kind = TOKEN_NUMBER;
@@ -184,10 +126,61 @@ tokenize(Buffer buffer, String filename)
                 advance(&eater);
             }
             token->value = str_internalize(value);
-        }
-        else if ((eater.scanner[0] == '_') ||
-                 (('A' <= eater.scanner[0]) && (eater.scanner[0] <= 'Z')) ||
-                 (('a' <= eater.scanner[0]) && (eater.scanner[0] <= 'z')))
+            } break;
+            
+            case 'a':
+            case 'b':
+            case 'c':
+            case 'd':
+            case 'e':
+            case 'f':
+            case 'g':
+            case 'h':
+            case 'i':
+            case 'j':
+            case 'k':
+            case 'l':
+            case 'm':
+            case 'n':
+            case 'o':
+            case 'p':
+            case 'q':
+            case 'r':
+            case 's':
+            case 't':
+            case 'u':
+            case 'v':
+            case 'w':
+            case 'x':
+            case 'y':
+            case 'z':
+            case 'A':
+            case 'B':
+            case 'C':
+            case 'D':
+            case 'E':
+            case 'F':
+            case 'G':
+            case 'H':
+            case 'I':
+            case 'J':
+            case 'K':
+            case 'L':
+            case 'M':
+            case 'N':
+            case 'O':
+            case 'P':
+            case 'Q':
+            case 'R':
+            case 'S':
+            case 'T':
+            case 'U':
+            case 'V':
+            case 'W':
+            case 'X':
+            case 'Y':
+            case 'Z':
+            case '_':
         {
             token = next_token(result, tokenIndex++);
             token->kind = TOKEN_ID;
@@ -206,23 +199,25 @@ tokenize(Buffer buffer, String filename)
                 advance(&eater);
             }
             token->value = str_internalize(value);
-        }
-        else
+            } break;
+            
+            default:
         {
             fprintf(stderr, "Unhandled scan item: %c\n", eater.scanner[0]);
             advance(&eater);
-        }
-
+            } break;
+    }
+        
         if (token)
         {
             token->lineNumber = eater.lineNumber;
             token->filename = filename;
-            if (token->kind == TOKEN_EOL)
+            if (token->kind == '\n')
             {
                 ++eater.lineNumber;
                 eater.columnNumber = 1;
             }
-
+            
             if (prevToken)
             {
                 prevToken->nextToken = token;
@@ -231,8 +226,8 @@ tokenize(Buffer buffer, String filename)
         }
     }
 
-    if ((prevToken->kind != TOKEN_EOL) &&
-        (prevToken->kind != TOKEN_SEMI))
+    if ((prevToken->kind != '\n') &&
+        (prevToken->kind != ';'))
     {
         //fprintf(stderr, "The Tokenizer expects the token stream to end with a newline or semi-colon, but you're forgiven for now...\n");
         Token *token = next_token(result, tokenIndex++);
@@ -247,7 +242,9 @@ tokenize(Buffer buffer, String filename)
     return result;
 }
 
-#undef SIMPLE_TOKEN
+#undef CASE3
+#undef CASE2
+#undef CASE1
 
 internal Token *
 tokenize_string(String tokenString)
@@ -259,38 +256,47 @@ tokenize_string(String tokenString)
 internal Token *
 tokenize_file(char *filename)
 {
+    Token *result = 0;
     String fileName = str_internalize_cstring(filename);
     // TODO(michiel): read_entire_file(String) ??
     Buffer fileBuffer = read_entire_file(filename);
-    return tokenize(fileBuffer, fileName);
+    if (fileBuffer.size)
+    {
+     result = tokenize(fileBuffer, fileName);
+    }
+    return result;
 }
 
 #define CASE(name) case TOKEN_##name: { fprintf(fileStream.file, #name); } break
+#define CASEc(name) case name: { fprintf(fileStream.file, "%c", name); } break
 internal void
 print_token_kind(FileStream fileStream, Token *token)
 {
-    switch (token->kind)
+    switch ((u32)token->kind)
     {
         CASE(NULL);
         CASE(NUMBER);
         CASE(ID);
         CASE(INC);
         CASE(DEC);
-        CASE(INV);
-        CASE(NOT);
-        CASE(MUL);
-        CASE(DIV);
-        CASE(AND);
+
+        CASEc('~');
+        CASEc('!');
+        CASEc('*');
+        CASEc('/');
+        CASEc('&');
+        
         CASE(SLL);
-        CASE(SRL);
+CASE(SRL);
         CASE(SRA);
-        CASE(SUB);
-        CASE(ADD);
-        CASE(OR);
-        CASE(XOR);
-        CASE(ASSIGN);
-        CASE(SEMI);
-        CASE(EOL);
+
+        CASEc('-');
+        CASEc('+');
+        CASEc('|');
+        CASEc('^');
+        CASEc('=');
+        CASEc(';');
+        CASEc('\n');
 
         default: {
             fprintf(stdout, "unknown");
@@ -305,7 +311,7 @@ print_token(FileStream fileStream, Token *token)
     fprintf(fileStream.file, "%.*s:%d:%d < ", token->filename.size, token->filename.data,
             token->lineNumber, token->colNumber);
     print_token_kind(fileStream, token);
-    if (token->kind == TOKEN_EOL)
+    if (token->kind == '\n')
     {
         fprintf(fileStream.file, ",\\n");
     }

@@ -1,4 +1,5 @@
-X = IO + 0
+SYNCED
+X = IO
 Y = X + 1
 IO = X
 IO = Y

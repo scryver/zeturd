@@ -1,3 +1,212 @@
+typedef struct GraphState
+{
+    FileStream output;
+    Map *nodes;
+    u32 index;
+    u32 opIndex;
+    u32 indent;
+} GraphState;
+
+internal void
+print_graph_line(GraphState *state, char *fmt, ...)
+{
+    if (state->indent)
+    {
+    char indent[128];
+    for (u32 i = 0; i < state->indent; ++i)
+    {
+        indent[i * 4 + 0] = ' ';
+        indent[i * 4 + 1] = ' ';
+        indent[i * 4 + 2] = ' ';
+        indent[i * 4 + 3] = ' ';
+        indent[i * 4 + 4] = 0;
+    }
+    fprintf(state->output.file, "%s", indent);
+    }
+    
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(state->output.file, fmt, args);
+    va_end(args);
+    fputc('\n', state->output.file);
+}
+
+internal String
+graph_variable(GraphState *state, Variable *var)
+{
+    String result = {0};
+    String label = {0};
+    char buf[128];
+    if (var->kind == VARIABLE_IDENTIFIER)
+    {
+        snprintf(buf, sizeof(buf), "%.*s_%d", var->id->name.size, var->id->name.data,
+                 state->index);
+         label = var->id->name;
+        result = str_internalize_cstring(buf);
+        }
+    else
+    {
+        i_expect(var->kind == VARIABLE_CONSTANT);
+        snprintf(buf, sizeof(buf), "%d", var->constant->value);
+        label = str_internalize_cstring(buf);
+        snprintf(buf, sizeof(buf), "const_%d_%d", var->constant->value, state->index);
+        result = str_internalize_cstring(buf);
+    }
+    print_graph_line(state, "%.*s [shape=record, label=\"%.*s\"];",
+            result.size, result.data, label.size, label.data);
+    return result;
+}
+
+internal String
+graph_expression(GraphState *state, Expression *expr)
+{
+    String result = {0};
+    String left = {0};
+    String right = {0};
+    
+    if (expr->leftKind == EXPRESSION_VAR)
+    {
+        left = graph_variable(state, expr->left);
+    }
+    else
+    {
+        i_expect(expr->leftKind == EXPRESSION_EXPR);
+        left = graph_expression(state, expr->leftExpr);
+    }
+    
+    if (expr->op != EXPR_OP_NOP)
+    {
+        if (expr->rightKind == EXPRESSION_VAR)
+        {
+            right = graph_variable(state, expr->right);
+        }
+        else
+        {
+            i_expect(expr->rightKind == EXPRESSION_EXPR);
+            right = graph_expression(state, expr->rightExpr);
+        }
+    }
+
+#if 0    
+    u64 hash = hash_bytes(left.data, left.size);
+    u64 key = hash ? hash : 1;
+    String *leftM = map_get_from_u64(state->nodes, key);
+    #endif
+
+    
+    if (expr->op == EXPR_OP_NOP)
+    {
+        result = left;
+    }
+    else
+    {
+        i_expect(left.size);
+        i_expect(right.size);
+        char buf[128];
+        
+        char *op = "";
+        char *opLabel = "";
+        switch (expr->op)
+        {
+            case EXPR_OP_AND: { op = "AND"; opLabel = "&"; } break;
+            case EXPR_OP_OR: { op = "OR"; opLabel = "|"; } break;
+            case EXPR_OP_ADD: { op = "ADD"; opLabel = "+"; } break;
+            INVALID_DEFAULT_CASE;
+        }
+        
+        snprintf(buf, sizeof(buf), "%s_%d", op, state->opIndex++);
+        result = str_internalize_cstring(buf);
+        
+        print_graph_line(state, "%.*s [label=\"%s\"];", result.size, result.data, opLabel);
+        print_graph_line(state, "%.*s -> %.*s;", left.size, left.data, 
+                         result.size, result.data);
+        print_graph_line(state, "%.*s -> %.*s;", right.size, right.data, 
+                         result.size, result.data);
+    }
+    
+    return result;
+}
+
+internal String
+graph_assignment(GraphState *state, Assignment *assign)
+{
+    String name = assign->id->name;
+    char buf[128];
+    snprintf(buf, sizeof(buf), "%.*s_%d", name.size, name.data, state->index);
+    String result = str_internalize_cstring(buf);
+    String exprLabel = graph_expression(state, assign->expr);
+    
+    print_graph_line(state, "%.*s [shape=record, label=\"%.*s\"];",
+                     result.size, result.data, assign->id->name.size, assign->id->name.data);
+    print_graph_line(state, "%.*s -> %.*s;\n", exprLabel.size, exprLabel.data,
+                     result.size, result.data);
+    
+    return result;
+}
+
+internal String
+graph_statement(GraphState *state, Statement *statement)
+{
+    String result = {0};
+    if (statement->kind == STATEMENT_ASSIGN)
+    {
+        result = graph_assignment(state, statement->assign);
+    }
+    else
+    {
+        i_expect(statement->kind == STATEMENT_EXPR);
+        //result = graph_expression(state, statement->expr);
+    }
+    return result;
+}
+
+internal void
+graph_program(Program *program, char *fileName)
+{
+    GraphState state = {0};
+    state.output.file = fopen(fileName, "wb");
+    
+    print_graph_line(&state, "digraph testing {");
+    ++state.indent;
+    print_graph_line(&state, "compound=true;");
+    print_graph_line(&state, "graph [nodesep=0];");
+    print_graph_line(&state, "node [peripheries=1];");
+    //fprintf(state.output.file, "    rankdir=LR;\n ranksep=\"1\";\n\n");
+    
+    String prevResult = {0};
+    
+    Map printedNodes = {0};
+    state.nodes = &printedNodes;
+    
+    char buf[128];
+        for (u32 statementIndex = 0;
+         statementIndex < program->nrStatements;
+         ++statementIndex)
+    {
+        snprintf(buf, sizeof(buf), "stmt%d", statementIndex);
+        String next = str_internalize_cstring(buf);
+        Statement *statement = program->statements + statementIndex;
+        print_graph_line(&state, "subgraph cluster_%d {", statementIndex);
+        ++state.indent;
+        state.index = statementIndex;
+           graph_statement(&state, statement);
+        print_graph_line(&state, "label = \"Statement %d\";", statementIndex);
+        print_graph_line(&state, "%.*s [shape=point, peripheries=0, style=invis, width=0, height=0, penwidth=0];", 
+                         next.size, next.data);
+        --state.indent;
+        print_graph_line(&state, "}");
+        if (prevResult.size)
+        {
+            print_graph_line(&state, "%.*s -> %.*s [ltail=cluster_%d, lhead=cluster_%d];",
+                             prevResult.size, prevResult.data, next.size, next.data,
+                             statementIndex - 1, statementIndex);
+        }
+        prevResult = next;
+    }
+    --state.indent;
+    print_graph_line(&state, "}\n");
+}
+
 #define LAYER_HAS_MEMA 0x001
 #define LAYER_HAS_MEMB 0x002
 #define LAYER_HAS_IMM  0x004
@@ -8,7 +217,7 @@
 #define LAYER_HAS_MEMW 0x200
 
 internal void
-save_graph(char *fileName, u32 registers, u32 opCodeCount, OpCodeBuild *opCodes)
+save_graph(char *fileName, u32 registers, u32 opCodeCount, OpCode *opCodes)
 {
 FileStream graphicStream = {0};
 graphicStream.file = fopen(fileName, "wb");
@@ -24,7 +233,9 @@ for (u32 regIdx = 0; regIdx < registers; ++regIdx)
 u32 nextLayerHas = 0;
 for (u32 opIdx = 0; opIdx < opCodeCount; ++opIdx)
 {
-    OpCodeBuild opCode = opCodes[opIdx];
+    OpCode opCode = opCodes[opIdx];
+        
+        fprintf(graphicStream.file, "  subgraph cluster%d {\n", opIdx);
     
     u32 layerHas = nextLayerHas;
     nextLayerHas = 0;
@@ -242,6 +453,8 @@ for (u32 opIdx = 0; opIdx < opCodeCount; ++opIdx)
         //fprintf(graphicStream.file, "alu%03d; ", opIdx);
     }
     fprintf(graphicStream.file, "};\n");
+        
+        fprintf(graphicStream.file, "  }\n");
 }
 fprintf(graphicStream.file, "}\n");
 
@@ -281,13 +494,13 @@ print_selection(FileStream stream, char *name, u32 index, enum Selection select)
 }
 
 internal void
-test_graph(char *fileName, u32 registers, u32 opCodeCount, OpCodeBuild *opCodes, b32 minimize)
+test_graph(char *fileName, u32 registers, u32 opCodeCount, OpCode *opCodes, b32 minimize)
 {
     FileStream graphicStream = {0};
     graphicStream.file = fopen(fileName, "wb");
     
     fprintf(graphicStream.file, "digraph testing {\n");
-    fprintf(graphicStream.file, "    rankdir=LR;\n\n");
+    fprintf(graphicStream.file, "    rankdir=LR;\n    ranksep=\"1\";\n\n");
 
 #if 0    
     fprintf(graphicStream.file, "    imm0 [shape=record, label=\"0\"];\n");
@@ -298,8 +511,8 @@ test_graph(char *fileName, u32 registers, u32 opCodeCount, OpCodeBuild *opCodes,
     
     for (u32 opIdx = 0; opIdx < opCodeCount; ++opIdx)
     {
-    OpCodeBuild opCode = opCodes[opIdx];
-    
+    OpCode opCode = opCodes[opIdx];
+        
     char *aluOp = "";
     switch (opCode.aluOperation)
     {
@@ -318,8 +531,10 @@ test_graph(char *fileName, u32 registers, u32 opCodeCount, OpCodeBuild *opCodes,
                 "    ioIn%d [shape=record, label=\"%d: IO In\"];\n", graphIdx, graphIdx);
             
         fprintf(graphicStream.file,
-                "    mem%d [shape=record, label=\"{<in>in|{mem[%d]|mem[%d]}|{<a>a|<b>b}}\"];\n",
-                graphIdx, opCode.memoryAddrA, opCode.memoryAddrB);
+                "    mem%d [shape=record, "
+                "label=\"{<in>in|{mem[%d]%s|mem[%d]%s}|{<a>a|<b>b}}\"];\n", graphIdx, 
+                opCode.memoryAddrA, opCode.memoryReadA ? " r" : "",
+                opCode.memoryAddrB, opCode.memoryReadB ? " r" : "");
         
     fprintf(graphicStream.file,
             "    alu%d [shape=record, label=\"{{<a>a|<b>b}|%s|<out>out}\"];\n",
@@ -347,7 +562,7 @@ test_graph(char *fileName, u32 registers, u32 opCodeCount, OpCodeBuild *opCodes,
         print_selection(graphicStream, "AluB", graphIdx, opCode.selectAluB);
         fprintf(graphicStream.file, "    outAluB%d:e -> alu%d:b:w;\n", graphIdx, graphIdx);
     }
-        }
+    }
     
     fprintf(graphicStream.file, "}\n");
     

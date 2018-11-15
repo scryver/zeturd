@@ -99,13 +99,13 @@ parse_variable(Token **at)
         result.var->kind = VARIABLE_CONSTANT;
         result.var->constant = parse_constant(at);
     }
-    else if ((*at)->kind == TOKEN_PAREN_OPEN)
+    else if ((*at)->kind == '(')
     {
         *at = (*at)->nextToken;
         result.isExpr = true;
         result.expr = parse_expression_add_op(at, 0);
         result.expr->complete = true;
-        i_expect((*at)->kind == TOKEN_PAREN_CLOSE);
+        i_expect((*at)->kind == ')');
         *at = (*at)->nextToken;
     }
     else
@@ -199,7 +199,9 @@ parse_expression_precedence(Token **at, Expression *curExpr, Expression *leftExp
     return result;
 }
 
-#define CASE(x) case TOKEN_##x: { result = parse_expression_precedence(at, result, leftExpr, EXPR_OP_##x); } break
+#define CASEC(c, x) case c: { result = parse_expression_precedence(at, result, leftExpr, EXPR_OP_##x); } break
+
+#define CASET(x) case TOKEN_##x: { result = parse_expression_precedence(at, result, leftExpr, EXPR_OP_##x); } break
 
 internal Expression *
 parse_expression_mul_op(Token **at, Expression *leftExpr)
@@ -228,14 +230,14 @@ parse_expression_mul_op(Token **at, Expression *leftExpr)
         result->op = EXPR_OP_NOP;
     }
 
-    switch ((*at)->kind)
+    switch ((u32)(*at)->kind)
     {
-        CASE(MUL);
-        CASE(DIV);
-        CASE(AND);
-        CASE(SLL);
-        CASE(SRL);
-        CASE(SRA);
+        CASEC('*', MUL);
+        CASEC('/', DIV);
+        CASEC('&', AND);
+        CASET(SLL);
+        CASET(SRL);
+        CASET(SRA);
         default:
         {
             if (leftExpr)
@@ -280,12 +282,12 @@ parse_expression_add_op(Token **at, Expression *leftExpr)
         result->leftKind = EXPRESSION_EXPR;
     }
 
-    switch ((*at)->kind)
+    switch ((u32)(*at)->kind)
     {
-        CASE(SUB);
-        CASE(ADD);
-        CASE(OR);
-        CASE(XOR);
+        CASEC('-', SUB);
+        CASEC('+', ADD);
+        CASEC('|', OR);
+        CASEC('^', XOR);
         default:
         {
             result = parse_expression_mul_op(at, result);
@@ -306,7 +308,8 @@ parse_expression_add_op(Token **at, Expression *leftExpr)
     return result;
 }
 
-#undef CASE
+#undef CASEC
+#undef CASET
 
 internal Expression *
 parse_expression(Token **at)
@@ -325,13 +328,13 @@ parse_assignment(Token **at)
 {
     Assignment *result = allocate_struct(Assignment, 0);
     result->id = parse_identifier(at);
-    if ((*at)->kind != TOKEN_ASSIGN)
+    if ((*at)->kind != '=')
     {
-        fprintf(stderr, "TOKEN_ASSIGN expected, got ");
+        fprintf(stderr, "ASSIGN expected, got ");
         print_token((FileStream){.file=stderr}, *at);
         fprintf(stderr, "\n");
     }
-    i_expect((*at)->kind == TOKEN_ASSIGN);
+    i_expect((*at)->kind == '=');
     *at = (*at)->nextToken;
     result->expr = parse_expression(at);
     return result;
@@ -340,7 +343,7 @@ parse_assignment(Token **at)
 internal void
 parse_statement(Token **at, Statement *statement)
 {
-    if ((*at)->nextToken && ((*at)->nextToken->kind == TOKEN_ASSIGN))
+    if ((*at)->nextToken && ((*at)->nextToken->kind == '='))
     {
         statement->kind = STATEMENT_ASSIGN;
         statement->assign = parse_assignment(at);
@@ -352,7 +355,7 @@ parse_statement(Token **at, Statement *statement)
     }
 }
 
-#define IS_END_STATEMENT(token) ((token->kind == TOKEN_EOF) || (token->kind == TOKEN_EOL) || (token->kind == TOKEN_SEMI))
+#define IS_END_STATEMENT(token) ((token->kind == TOKEN_EOF) || (token->kind == '\n') || (token->kind == ';'))
 
 internal Program *
 parse(Token *tokens)
@@ -381,6 +384,8 @@ parse(Token *tokens)
 
     return program;
 }
+
+#undef IS_END_STATEMENT
 
 internal void
 print_constant(FileStream stream, Constant *constant)

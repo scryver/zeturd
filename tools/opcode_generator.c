@@ -30,7 +30,56 @@ enum AluOp
     Alu_Count,
 };
 
-typedef struct OpCodeBuild
+typedef struct Alu
+{
+    enum Selection inputA;
+    enum Selection inputB;
+    enum AluOp op;
+} Alu;
+
+typedef struct Register
+{
+    union
+    {
+    struct
+    {
+            b8 memoryWrite;
+            b8 memoryReadA;
+            b8 memoryReadB;
+    };
+        u32 control;
+    };
+    
+    enum Selection input;
+    u32 writeAddr;
+    u32 readAddrA;
+    u32 readAddrB;
+} Register;
+
+typedef struct IOOut
+{
+    enum Selection output;
+} IOOut;
+
+typedef struct OpCodeEntry
+{
+    // NOTE(michiel): This structure doesn't account for clocking, so memory reads are expected
+    // to be finished before usage in alu or io out.
+    b32      useMemory;
+    Register memory;
+    
+    b32      useAlu;
+    Alu      alu;
+    
+    b32      useIOIn;
+b32      useIOOut;
+    IOOut    output;
+    
+    b32      useImmediate;
+    u32      immediate;
+    } OpCodeEntry;
+
+typedef struct OpCode
 {
     enum Selection selectAluA;
     enum Selection selectAluB;
@@ -43,70 +92,10 @@ typedef struct OpCodeBuild
     b32 memoryReadB;
     b32 memoryWrite;
     
-    b32 useB;
     u32 immediate;
     u32 memoryAddrA;
     u32 memoryAddrB;
-} OpCodeBuild;
-
-internal b32 opc_only_selection(OpCodeBuild *opCode)
-{
-    b32 result = false;
-    if ((opCode->selectAluA || opCode->selectAluB ||
-         opCode->selectMem || opCode->selectIO) &&
-        !(opCode->aluOperation || opCode->memoryReadA ||
-          opCode->memoryReadB || opCode->memoryWrite))
-    {
-        result = true;
-    }
-    return result;
-}
-
-internal b32 opc_has_data(OpCodeBuild *opCode)
-{
-    b32 result = false;
-    if (opCode->selectAluA || opCode->selectAluB ||
-        opCode->selectMem || opCode->selectIO ||
-        opCode->aluOperation ||
-        opCode->memoryReadA || opCode->memoryReadB ||
-        opCode->memoryWrite)
-    {
-        result = true;
-    }
-    return result;
-}
-
-internal u32 opc_max_immediate(u32 opCount, OpCodeBuild *opCodes)
-{
-    u32 maxImmediate = 0;
-    for (u32 opIdx = 0; opIdx < opCount; ++opIdx)
-    {
-        OpCodeBuild opCode = opCodes[opIdx];
-        if (maxImmediate < opCode.immediate)
-        {
-            maxImmediate = opCode.immediate;
-        }
-    }
-    return maxImmediate;
-}
-
-internal u32 opc_max_address(u32 opCount, OpCodeBuild *opCodes)
-{
-    u32 maxAddress = 0;
-    for (u32 opIdx = 0; opIdx < opCount; ++opIdx)
-    {
-        OpCodeBuild opCode = opCodes[opIdx];
-        if (maxAddress < opCode.memoryAddrA)
-        {
-            maxAddress = opCode.memoryAddrA;
-        }
-        if (maxAddress < opCode.memoryAddrB)
-        {
-            maxAddress = opCode.memoryAddrB;
-        }
-    }
-    return maxAddress;
-}
+} OpCode;
 
 typedef struct OpCodeStats
 {
@@ -129,69 +118,89 @@ typedef struct OpCodeStats
     u32 opCodeBitWidth;
 } OpCodeStats;
 
-#pragma pack(push, 1)
-typedef union OpCode
+typedef struct OpCodeBuilder
 {
-    struct
+    u32 maxOpCodes;
+    u32 opCodeCount;
+    OpCodeEntry *entries;
+    
+    u32 registerCount;
+    Map registerMap;
+    
+    OpCodeStats stats;
+} OpCodeBuilder;
+
+internal b32 opc_only_selection(OpCode *opCode)
+{
+    b32 result = false;
+    if ((opCode->selectAluA || opCode->selectAluB ||
+         opCode->selectMem || opCode->selectIO) &&
+        !(opCode->aluOperation || opCode->memoryReadA ||
+          opCode->memoryReadB || opCode->memoryWrite))
     {
-        union
+        result = true;
+    }
+    return result;
+}
+
+internal b32 opc_has_select(OpCode *opCode, enum Selection select)
+{
+    b32 result = false;
+    if ((opCode->selectAluA == select) ||
+        (opCode->selectAluB == select) ||
+        (opCode->selectMem == select) ||
+        (opCode->selectIO == select))
+    {
+        result = true;
+    }
+    return result;
+}
+
+internal b32 opc_has_data(OpCode *opCode)
+{
+    b32 result = false;
+    if (opCode->selectAluA || opCode->selectAluB ||
+        opCode->selectMem || opCode->selectIO ||
+        opCode->aluOperation ||
+        opCode->memoryReadA || opCode->memoryReadB ||
+        opCode->memoryWrite)
+    {
+        result = true;
+    }
+    return result;
+}
+
+internal u32 opc_max_immediate(u32 opCount, OpCode *opCodes)
+{
+    u32 maxImmediate = 0;
+    for (u32 opIdx = 0; opIdx < opCount; ++opIdx)
+    {
+        OpCode opCode = opCodes[opIdx];
+        if (maxImmediate < opCode.immediate)
         {
-            struct
-            {
-                u64 padding     : 23;
-                u64 memoryAddrB : 9;
-            };
-            u64 immediate   : 32;
-        };
-        u64 memoryAddrA  : 9;
-        u64 aluOperation : 7;
-        u64 useMemoryB   : 1;
-        u64 memoryWrite  : 1;
-        u64 memoryReadB  : 1;
-        u64 memoryReadA  : 1;
-        u64 selectIO     : 3;
-        u64 selectMem    : 3;
-        u64 selectAluB   : 3;
-        u64 selectAluA   : 3;
-    };
-    u64 totalOp;
-} OpCode;
-#pragma pack(pop)
+            maxImmediate = opCode.immediate;
+        }
+    }
+    return maxImmediate;
+}
 
-#define OPC_IMM_OFFS    0
-#define OPC_IMM_MASK    (((1LLU << OPC_IMM_BITS) - 1) << OPC_IMM_OFFS)
-#define OPC_ADDRB_BITS  9
-#define OPC_ADDRB_OFFS  23
-#define OPC_ADDRB_MASK  (((1LLU << OPC_ADDRB_BITS) - 1) << OPC_ADDRB_OFFS)
-#define OPC_ADDRA_BITS  9
-#define OPC_ADDRA_OFFS  (OPC_ADDRB_BITS + OPC_ADDRB_OFFS)
-#define OPC_ADDRA_MASK  (((1LLU << OPC_ADDRA_BITS) - 1) << OPC_ADDRA_OFFS)
-#define OPC_ALUOP_BITS  7
-#define OPC_ALUOP_OFFS  (OPC_ADDRA_BITS + OPC_ADDRA_OFFS)
-#define OPC_ALUOP_MASK  (((1LLU << OPC_ALUOP_BITS) - 1) << OPC_ALUOP_OFFS)
-#define OPC_USEB_OFFS   (OPC_ALUOP_BITS + OPC_ALUOP_OFFS)
-#define OPC_USEB_MASK   (1LLU << OPC_USEB_OFFS)
-#define OPC_MEMWR_OFFS  (1 + OPC_USEB_OFFS)
-#define OPC_MEMWR_MASK  (1LLU << OPC_MEMWR_OFFS)
-#define OPC_MEMRB_OFFS  (1 + OPC_MEMWR_OFFS)
-#define OPC_MEMRB_MASK  (1LLU << OPC_MEMRB_OFFS)
-#define OPC_MEMRA_OFFS  (1 + OPC_MEMRB_OFFS)
-#define OPC_MEMRA_MASK  (1LLU << OPC_MEMRA_OFFS)
-#define OPC_SELIO_BITS  3
-#define OPC_SELIO_OFFS  (1 + OPC_MEMRA_OFFS)
-#define OPC_SELIO_MASK  (((1LLU << OPC_SELIO_BITS) - 1) << OPC_SELIO_OFFS)
-#define OPC_SELMEM_BITS 3
-#define OPC_SELMEM_OFFS (OPC_SELIO_BITS + OPC_SELIO_OFFS)
-#define OPC_SELMEM_MASK (((1LLU << OPC_SELMEM_BITS) - 1) << OPC_SELMEM_OFFS)
-#define OPC_SELALB_BITS 3
-#define OPC_SELALB_OFFS (OPC_SELMEM_BITS + OPC_SELMEM_OFFS)
-#define OPC_SELALB_MASK (((1LLU << OPC_SELALB_BITS) - 1) << OPC_SELALB_OFFS)
-#define OPC_SELALA_BITS 3
-#define OPC_SELALA_OFFS (OPC_SELALB_BITS + OPC_SELALB_OFFS)
-#define OPC_SELALA_MASK (((1LLU << OPC_SELALA_BITS) - 1) << OPC_SELALA_OFFS)
-
-#define OPC_SEL_MASK    (OPC_SELALA_MASK | OPC_SELALB_MASK | OPC_SELMEM_MASK | OPC_SELIO_MASK)
-#define OPC_MEMCTL_MASK (OPC_MEMRA_MASK | OPC_MEMRB_MASK | OPC_MEMWR_MASK)
+internal u32 opc_max_address(u32 opCount, OpCode *opCodes)
+{
+    u32 maxAddress = 0;
+    for (u32 opIdx = 0; opIdx < opCount; ++opIdx)
+    {
+        OpCode opCode = opCodes[opIdx];
+        if (maxAddress < opCode.memoryAddrA)
+        {
+            maxAddress = opCode.memoryAddrA;
+        }
+        if (maxAddress < opCode.memoryAddrB)
+        {
+            maxAddress = opCode.memoryAddrB;
+        }
+    }
+    return maxAddress;
+}
 
 internal inline u32
 get_offset_immediate(OpCodeStats *stats)
@@ -299,7 +308,7 @@ get_offset_sel_alu_a(OpCodeStats *stats)
 }
 
 internal inline u64
-opcode_packing(OpCodeStats *stats, OpCodeBuild *opCode)
+opcode_packing(OpCodeStats *stats, OpCode *opCode)
 {
     u64 result = 0;
     
@@ -313,7 +322,7 @@ opcode_packing(OpCodeStats *stats, OpCodeBuild *opCode)
         result |= (opCode->memoryAddrB << get_offset_addr_b(stats));
     }
     result |= (opCode->memoryAddrA << get_offset_addr_a(stats));
-    result |= ((opCode->useB) << get_offset_useB(stats));
+    result |= ((opCode->memoryReadB ? 1 : 0) << get_offset_useB(stats)); // TODO(michiel): Remove
     result |= ((opCode->memoryWrite) << get_offset_mem_write(stats));
     result |= ((opCode->memoryReadA) << get_offset_mem_read_a(stats));
     result |= ((opCode->memoryReadB) << get_offset_mem_read_b(stats));
@@ -325,9 +334,6 @@ opcode_packing(OpCodeStats *stats, OpCodeBuild *opCode)
     
     return result;
 }
-
-#include "./vhdl_generator.c"
-#include "./graphvizu.c"
 
 internal char *
 select_to_string(enum Selection select)
@@ -362,39 +368,65 @@ alu_op_to_string(enum AluOp aluOp)
 }
 
 internal void
-print_opcode(OpCode opcode, b32 verbose)
+print_opcode_single(OpCode *opcode)
 {
-    fprintf(stdout, "OpCode: 0x%016lX\n", opcode.totalOp);
-    if (verbose)
+    fprintf(stdout, "OpCode:\n");
+    fprintf(stdout, "  Alu A  : %s\n", select_to_string(opcode->selectAluA));
+    fprintf(stdout, "  Alu B  : %s\n", select_to_string(opcode->selectAluB));
+    fprintf(stdout, "  Mem in : %s\n", select_to_string(opcode->selectMem));
+    fprintf(stdout, "  IO     : %s\n", select_to_string(opcode->selectIO));
+    fprintf(stdout, "  Mem op : %s%s%s\n",
+            opcode->memoryReadA ? "read A " : "", opcode->memoryReadB ? "read B " : "",
+            opcode->memoryWrite ? "| write" : (!(opcode->memoryReadA || opcode->memoryReadB) ? "none" : ""));
+    fprintf(stdout, "  Use B  : %s\n", opcode->memoryReadB ? "yes" : "no");
+    fprintf(stdout, "  Alu op : %s\n", alu_op_to_string(opcode->aluOperation));
+    fprintf(stdout, "  Addr A : %u\n", opcode->memoryAddrA);
+    if (opcode->memoryReadB)
     {
-        fprintf(stdout, "  Alu A  : %s\n", select_to_string(opcode.selectAluA));
-        fprintf(stdout, "  Alu B  : %s\n", select_to_string(opcode.selectAluB));
-        fprintf(stdout, "  Mem in : %s\n", select_to_string(opcode.selectMem));
-        fprintf(stdout, "  IO     : %s\n", select_to_string(opcode.selectIO));
-        fprintf(stdout, "  Mem op : %s%s%s\n",
-                opcode.memoryReadA ? "read A " : "", opcode.memoryReadB ? "read B " : "",
-                opcode.memoryWrite ? "| write" : (!(opcode.memoryReadA || opcode.memoryReadB) ? "none" : ""));
-        fprintf(stdout, "  Use B  : %s\n", opcode.useMemoryB ? "yes" : "no");
-        fprintf(stdout, "  Alu op : %s\n", alu_op_to_string(opcode.aluOperation));
-        fprintf(stdout, "  Addr A : %u\n", opcode.memoryAddrA);
-        if (opcode.useMemoryB)
+        fprintf(stdout, "  Addr B : %u\n", opcode->memoryAddrB);
+    }
+    else
+    {
+        fprintf(stdout, "  Imm    : %u\n", opcode->immediate);
+    }
+}
+
+#include "./vhdl_generator.c"
+#include "./graphvizu.c"
+#include "./simulator.c"
+#include "./optimizer.c"
+
+internal void
+print_opcode(FileStream output, OpCodeStats *stats, OpCode *opcode)
+{
+    fprintf(output.file, "OpCode: 0x%.*lX\n",
+            (get_offset_sel_alu_a(stats) + stats->selectBits + 3) / 4,
+            opcode_packing(stats, opcode));
+    if (output.verbose)
+    {
+        fprintf(output.file, "  Alu A  : %s\n", select_to_string(opcode->selectAluA));
+        fprintf(output.file, "  Alu B  : %s\n", select_to_string(opcode->selectAluB));
+        fprintf(output.file, "  Mem in : %s\n", select_to_string(opcode->selectMem));
+        fprintf(output.file, "  IO     : %s\n", select_to_string(opcode->selectIO));
+        fprintf(output.file, "  Mem op : %s%s%s\n",
+                opcode->memoryReadA ? "read A " : "", opcode->memoryReadB ? "read B " : "",
+                opcode->memoryWrite ? "| write" : (!(opcode->memoryReadA || opcode->memoryReadB) ? "none" : ""));
+        fprintf(output.file, "  Use B  : %s\n", opcode->memoryReadB ? "yes" : "no");
+        fprintf(output.file, "  Alu op : %s\n", alu_op_to_string(opcode->aluOperation));
+        fprintf(output.file, "  Addr A : %u\n", opcode->memoryAddrA);
+        if (opcode->memoryReadB)
         {
-            fprintf(stdout, "  Addr B : %u\n", opcode.memoryAddrB);
-            fprintf(stdout, "  Padding: %u\n", opcode.padding);
+            fprintf(output.file, "  Addr B : %u\n", opcode->memoryAddrB);
         }
         else
         {
-            fprintf(stdout, "  Imm    : %u\n", opcode.immediate);
+            fprintf(output.file, "  Imm    : %u\n", opcode->immediate);
         }
     }
 }
 
-global u32 gRegisterCount;
-global Map gRegisterMap_ = {0};
-global Map *gRegisterMap = &gRegisterMap_;
-
 internal OpCodeStats
-get_opcode_stats(u32 opCount, OpCodeBuild *opCodes)
+get_opcode_stats(u32 opCount, OpCode *opCodes)
 {
     OpCodeStats result = {0};
     
@@ -416,12 +448,136 @@ get_opcode_stats(u32 opCount, OpCodeBuild *opCodes)
     return result;
 }
 
+#if 0
+internal void
+push_opc(OpCodeBuilder *builder, OpCodeEntry *entry)
+{
+    i_expect(builder->opCodeCount < builder->maxOpCodes);
+    OpCodeEntry *op = builder->entries + builder->opCodeCount++;
+    *op = *entry;
+    // TODO(michiel): update stats
+}
+
+internal inline u32
+get_register_address(Map *registerMap, String name, u32 *registerCount)
+{
+    u32 *result = map_get(registerMap, name.data);
+    if (!result)
+    {
+        i_expect(*registerCount < MAX_REG);
+        result = allocate_size(sizeof(u32), 0);
+        *result = (*registerCount)++;
+        map_put(registerMap, name.data, result);
+    }
+    i_expect(*result < REG_MAX);
+    return *result;
+}
+
+internal void
+build_expression(Expression *expr, OpCodeBuilder *builder)
+{
+    // TODO(michiel): First ssa and constant folding e.d.
+    OpCodeEntry op = {0};
+    op.useAlu = true;
+        
+    if (expr->leftKind == EXPRESSION_VAR)
+    {
+        Variable *var = expr->left;
+        if (var->kind == VARIABLE_IDENTIFIER)
+        {
+            String idString = var->id->name;
+        i_expect(idString.size);
+            if (strings_are_equal(idString, str_internalize_cstring("IO")))
+            {
+                op.alu.inputA = Select_IO;
+                }
+            else
+            {
+                op.useMemory = true;
+                op.memory.memoryReadA = true;
+                op.memory.readAddrA = get_register_address(&builder->registerMap, idString,
+                                                            &builder->registerCount);
+                op.alu.inputA = Select_MemoryA;
+            }
+            }
+        else
+        {
+            i_expect(var->kind == VARIABLE_CONSTANT);
+            i_expect(var->constant->value < U32_MAX);
+            op.useImmediate = true;
+            op.immediate = var->constant->value;
+            op.alu.inputA = Select_Immediate;
+            }
+    }
+    else
+    {
+        i_expect(expr->leftKind == EXPRESSION_EXPR);
+        build_expression(expr->leftExpr, builder);
+        op.alu.inputA = Select_Alu;
+    }
+    
+    
+    if ((expr->op == EXPR_OP_AND) ||
+        (expr->op == EXPR_OP_OR) ||
+        (expr->op == EXPR_OP_ADD))
+    {
+        if (expr->rightKind == EXPRESSION_VAR)
+        {
+            Variable *var = expr->right;
+            if (var->kind == VARIABLE_IDENTIFIER)
+            {
+                String idString = var->id->name;
+                i_expect(idString.size);
+                if (strings_are_equal(idString, str_internalize_cstring("IO")))
+                {
+                    op.alu.inputB = Select_IO;
+                }
+                else
+                {
+                    op.useMemory = true;
+                    op.memory.memoryReadB = true;
+                    op.memory.readAddrB = get_register_address(&builder->registerMap, idString,
+                                                               &builder->registerCount);
+                    op.alu.inputB = Select_MemoryB;
+                }
+            }
+            else
+            {
+                i_expect(var->kind == VARIABLE_CONSTANT);
+                i_expect(var->constant->value < U32_MAX);
+                op.useImmediate = true;
+                op.immediate = var->constant->value;
+                op.alu.inputB = Select_Immediate;
+            }
+        }
+        else
+        {
+            i_expect(expr->rightKind == EXPRESSION_EXPR);
+            build_expression(expr->rightExpr, builder);
+            op.alu.inputB = Select_Alu;
+        }
+        
+    }
+    else
+    {
+        op.alu.op = Alu_Noop;
+    }
+    
+    push_opc(builder, &op);
+}
+#endif
+
+global u32 gRegisterCount;
+global Map gRegisterMap_ = {0};
+global Map *gRegisterMap = &gRegisterMap_;
+
 internal inline u32
 get_register_location(String varName)
 {
     u32 *result = map_get(gRegisterMap, varName.data);
     if (!result)
     {
+        i_expect(gRegisterCount < MAX_REG);
         result = allocate_size(sizeof(u32), 0);
         *result = gRegisterCount++;
         map_put(gRegisterMap, varName.data, result);
@@ -431,15 +587,11 @@ get_register_location(String varName)
 }
 
 internal void
-push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
+push_expression(Expression *expr, OpCode **opCodes)
 {
-    OpCode packedLoadOp = {0};
-    OpCode packedOp = {0};
-    packedLoadOp.selectAluA = Select_Alu;
-    
-    OpCodeBuild loadOp = {0};
-    OpCodeBuild op = {0};
-    loadOp.selectAluA = Select_Alu;
+    OpCode loadOp = {0};
+    OpCode op = {0};
+    //op.selectAluA = Select_Alu; // NOTE(michiel): Standard passthrough
     
     if (expr->leftKind == EXPRESSION_VAR)
     {
@@ -448,20 +600,14 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
         {
             i_expect(var->id->name.size);
             String idString = var->id->name;
-            
             if (strings_are_equal(idString, str_internalize_cstring("IO")))
             {
-                packedOp.selectAluA = Select_IO;
                 op.selectAluA = Select_IO;
             }
             else
             {
                 u32 regLoc = get_register_location(idString);
-                
-                packedLoadOp.memoryReadA = true;
-                packedLoadOp.memoryAddrA = regLoc;
-                packedOp.selectAluA = Select_MemoryA;
-                
+                loadOp.selectAluA = Select_Alu;
                 loadOp.memoryReadA = true;
                 loadOp.memoryAddrA = regLoc;
                 op.selectAluA = Select_MemoryA;
@@ -472,9 +618,6 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
             i_expect(var->kind == VARIABLE_CONSTANT);
             i_expect(var->constant->value < U32_MAX);
             
-            packedOp.selectAluA = Select_Immediate;
-            packedOp.immediate = var->constant->value;
-            
             op.selectAluA = Select_Immediate;
             op.immediate = var->constant->value;
         }
@@ -482,8 +625,7 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
     else
     {
         i_expect(expr->leftKind == EXPRESSION_EXPR);
-        push_expression(expr->leftExpr, opCodes, opCodeBuilds);
-        packedOp.selectAluA = Select_Alu;
+        push_expression(expr->leftExpr, opCodes);
         op.selectAluA = Select_Alu;
     }
     
@@ -501,19 +643,12 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
                 
                 if (strings_are_equal(idString, str_internalize_cstring("IO")))
                 {
-                    packedOp.selectAluB = Select_IO;
                     op.selectAluB = Select_IO;
                 }
                 else
                 {
                     u32 regLoc = get_register_location(idString);
-                    
-                    packedLoadOp.useMemoryB = true;
-                    packedLoadOp.memoryReadB = true;
-                    packedLoadOp.memoryAddrB = regLoc;
-                    packedOp.selectAluB = Select_MemoryB;
-                    
-                    loadOp.useB = true;
+                    loadOp.selectAluA = Select_Alu;
                     loadOp.memoryReadB = true;
                     loadOp.memoryAddrB = regLoc;
                     op.selectAluB = Select_MemoryB;
@@ -525,9 +660,6 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
                 i_expect(op.selectAluA != Select_Immediate);
                 i_expect(var->constant->value < U32_MAX);
                 
-                packedOp.selectAluB = Select_Immediate;
-                packedOp.immediate = var->constant->value;
-                
                 op.selectAluB = Select_Immediate;
                 op.immediate = var->constant->value;
             }
@@ -536,9 +668,8 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
         {
             i_expect(expr->rightKind == EXPRESSION_EXPR);
             i_expect(op.selectAluA != Select_Alu);
-            push_expression(expr->rightExpr, opCodes, opCodeBuilds);
+            push_expression(expr->rightExpr, opCodes);
             
-            packedOp.selectAluB = Select_Alu;
             op.selectAluB = Select_Alu;
         }
         
@@ -549,279 +680,46 @@ push_expression(Expression *expr, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
             case EXPR_OP_ADD: { op.aluOperation = Alu_Add; } break;
             INVALID_DEFAULT_CASE;
         }
-        packedOp.aluOperation = op.aluOperation;
     }
     
     if (opc_has_data(&loadOp))
     {
-        buf_push(*opCodes, packedLoadOp);
-        buf_push(*opCodeBuilds, loadOp);
+        buf_push(*opCodes, loadOp);
     }
-    buf_push(*opCodes, packedOp);
-    buf_push(*opCodeBuilds, op);
+    buf_push(*opCodes, op);
 }
 
 internal void
-push_assignment(Assignment *assign, OpCode **opCodes, OpCodeBuild **opCodeBuilds)
+push_assignment(Assignment *assign, OpCode **opCodes)
 {
-    push_expression(assign->expr, opCodes, opCodeBuilds);
+    push_expression(assign->expr, opCodes);
     
-    OpCodeBuild store = {0};
-    OpCode packedStore = {0};
+    OpCode store = {0};
+    store.selectAluA = Select_Alu;
     
     i_expect(assign->id->name.size);
     String idString = assign->id->name;
     
     if (strings_are_equal(idString, str_internalize_cstring("IO")))
     {
-        packedStore.selectIO = Select_Alu;
         store.selectIO = Select_Alu;
     }
     else
     {
         u32 regLoc = get_register_location(idString);
         
-        packedStore.selectMem = Select_Alu;
-        packedStore.memoryWrite = true;
-        packedStore.memoryAddrA = regLoc;
-        
         store.selectMem = Select_Alu;
         store.memoryWrite = true;
         store.memoryAddrA = regLoc;
     }
     
-    buf_push(*opCodes, packedStore);
-    buf_push(*opCodeBuilds, store);
-}
-
-internal void
-optimize_assignments(OpCode **opCodes, OpCodeBuild **opCodeBuilds)
-{
-    // NOTE(michiel): Removes alu no-ops to assignment selection
-    u32 opCodeCount = buf_len(*opCodeBuilds);
-    for (u32 opIdx = opCodeCount - 1; opIdx > 0; --opIdx)
-    {
-        OpCodeBuild cur = (*opCodeBuilds)[opIdx];
-        OpCodeBuild prev = (*opCodeBuilds)[opIdx - 1];
-        
-        //OpCode packedCur = (*opCodes)[opIdx];
-        OpCode packedPrev = (*opCodes)[opIdx - 1];
-        
-        if (opc_only_selection(&cur))
-        {
-            // NOTE(michiel): Only selection is set for cur
-            if (opc_only_selection(&prev) &&
-                prev.selectAluA && !prev.selectAluB &&
-                !prev.selectMem && !prev.selectIO)
-            {
-                // NOTE(michiel): Only alu A selection with a alu no-op for prev
-                
-                // TODO(michiel): Is this correct??
-                if (cur.selectAluA)
-                {
-                    // NOTE(michiel): Nothing to do
-                }
-                else if (cur.selectAluB)
-                {
-                    packedPrev.selectAluB = packedPrev.selectAluA;
-                    prev.selectAluB = prev.selectAluA;
-                }
-                else if (cur.selectMem)
-                {
-                    packedPrev.selectMem = packedPrev.selectAluA;
-                    prev.selectMem = prev.selectAluA;
-                }
-                else
-                {
-                    i_expect(cur.selectIO);
-                    packedPrev.selectIO = packedPrev.selectAluA;
-                    prev.selectIO = prev.selectAluA;
-                }
-                packedPrev.selectAluA = Select_Zero;
-                prev.selectAluA = Select_Zero;
-                
-                for (u32 popIdx = opIdx; popIdx < opCodeCount - 1; ++popIdx)
-                {
-                    (*opCodes)[popIdx] = (*opCodes)[popIdx + 1];
-                    (*opCodeBuilds)[popIdx] = (*opCodeBuilds)[popIdx + 1];
-                }
-                --buf_len_(*opCodes);
-                --buf_len_(*opCodeBuilds);
-                --opCodeCount;
-                --opIdx;
-                (*opCodes)[opIdx] = packedPrev;
-                (*opCodeBuilds)[opIdx] = prev;
-            }
-        }
-    }
-}
-
-internal void
-optimize_read_setups(OpCode **opCodes, OpCodeBuild **opCodeBuilds)
-{
-    // NOTE(michiel): Combines read setup with previous instructions that don't do
-    // memory manipulation or only do a write to the same address.
-    // It's a little more involved cause it also depends on the next instructions use
-    // of the read.
-    u32 opCodeCount = buf_len(*opCodeBuilds);
-    for (u32 opIdx = opCodeCount - 1; opIdx > 0; --opIdx)
-    {
-        OpCodeBuild cur = (*opCodeBuilds)[opIdx];
-        OpCodeBuild prev = (*opCodeBuilds)[opIdx - 1];
-        
-        OpCode packedCur = (*opCodes)[opIdx];
-        OpCode packedPrev = (*opCodes)[opIdx - 1];
-        
-        if (cur.memoryReadA && !cur.memoryReadB && !cur.memoryWrite &&
-            ((!cur.selectAluA && !cur.selectAluB &&
-              !cur.selectMem && !cur.selectIO) ||
-             (((cur.selectAluA == Select_Alu) &&
-               !cur.selectAluB && !cur.selectMem && !cur.selectIO) &&
-              (cur.aluOperation == Alu_Noop))))
-        {
-            // NOTE(michiel): Read setup for mem A
-            
-            if (!prev.memoryReadA && !prev.memoryReadB && !prev.memoryWrite)
-            {
-                // NOTE(michiel): If previous doesn't use memory
-                packedPrev.memoryReadA = packedCur.memoryReadA;
-                packedPrev.memoryAddrA = packedCur.memoryAddrA;
-                
-                prev.memoryReadA = cur.memoryReadA;
-                prev.memoryAddrA = cur.memoryAddrA;
-                
-                for (u32 popIdx = opIdx; popIdx < opCodeCount - 1; ++popIdx)
-                {
-                    (*opCodes)[popIdx] = (*opCodes)[popIdx + 1];
-                    (*opCodeBuilds)[popIdx] = (*opCodeBuilds)[popIdx + 1];
-                }
-                --buf_len_(*opCodes);
-                --buf_len_(*opCodeBuilds);
-                --opCodeCount;
-                --opIdx;
-                (*opCodes)[opIdx] = packedPrev;
-                (*opCodeBuilds)[opIdx] = prev;
-            }
-            else if (prev.memoryWrite && !prev.memoryReadA && !prev.memoryReadB &&
-                     (prev.memoryAddrA == cur.memoryAddrA))
-            {
-                // NOTE(michiel): Previous was write to the same memory address
-                
-                if (opIdx < (opCodeCount - 1))
-                {
-                    OpCodeBuild next = (*opCodeBuilds)[opIdx + 1];
-                    OpCode packedNext = (*opCodes)[opIdx + 1];
-                    
-                    if ((next.selectAluA == Select_MemoryA) ||
-                        (next.selectAluB == Select_MemoryA) ||
-                        (next.selectMem == Select_MemoryA) ||
-                        (next.selectIO == Select_MemoryA))
-                    {
-                        if (next.selectAluA == Select_MemoryA)
-                        {
-                            packedNext.selectAluA = Select_Alu;
-                            next.selectAluA = Select_Alu;
-                        }
-                        else if (next.selectAluB == Select_MemoryA)
-                        {
-                            packedNext.selectAluB = Select_Alu;
-                            next.selectAluB = Select_Alu;
-                        }
-                        else if (next.selectMem == Select_MemoryA)
-                        {
-                            packedNext.selectMem = Select_Alu;
-                            next.selectMem = Select_Alu;
-                        }
-                        else
-                        {
-                            i_expect(next.selectIO == Select_MemoryA);
-                            packedNext.selectIO = Select_Alu;
-                            next.selectIO = Select_Alu;
-                        }
-                        
-                        packedPrev.selectAluA = Select_Alu;
-                        prev.selectAluA = Select_Alu;
-                        
-                        for (u32 popIdx = opIdx; popIdx < opCodeCount - 1; ++popIdx)
-                        {
-                            (*opCodes)[popIdx] = (*opCodes)[popIdx + 1];
-                            (*opCodeBuilds)[popIdx] = (*opCodeBuilds)[popIdx + 1];
-                        }
-                        --buf_len_(*opCodes);
-                        --buf_len_(*opCodeBuilds);
-                        --opCodeCount;
-                        --opIdx;
-                        (*opCodes)[opIdx] = packedPrev;
-                        (*opCodes)[opIdx + 1] = packedNext;
-                        (*opCodeBuilds)[opIdx] = prev;
-                        (*opCodeBuilds)[opIdx + 1] = next;
-                    }
-                }
-            }
-        }
-    }
-}
-
-internal void
-optimize_combine_write(OpCode **opCodes, OpCodeBuild **opCodeBuilds)
-{
-    // NOTE(michiel): Combines a alu operation on a previous output _if_ the
-    // previous output was generated by a alu no-op.
-    u32 opCodeCount = buf_len(*opCodeBuilds);
-    for (u32 opIdx = opCodeCount - 1; opIdx > 0; --opIdx)
-    {
-        OpCodeBuild cur = (*opCodeBuilds)[opIdx];
-        OpCodeBuild prev = (*opCodeBuilds)[opIdx - 1];
-        
-        OpCode packedCur = (*opCodes)[opIdx];
-        OpCode packedPrev = (*opCodes)[opIdx - 1];
-        
-        if (cur.aluOperation &&
-            ((cur.selectAluA == Select_Alu) ||
-             (cur.selectAluB == Select_Alu)) &&
-            ((cur.selectAluA == Select_Immediate) ||
-             (cur.selectAluB == Select_Immediate)) &&
-            !(cur.memoryReadA || cur.memoryReadB || cur.memoryWrite))
-        {
-            // NOTE(michiel): Alu operation with alu out as one of the inputs and no memory mods
-            
-            if ((prev.aluOperation == Alu_Noop) &&
-                !prev.memoryReadA && !prev.memoryReadB)
-            {
-                packedPrev.aluOperation = packedCur.aluOperation;
-                prev.aluOperation = cur.aluOperation;
-                
-                if (cur.selectAluA == Select_Alu)
-                {
-                    packedPrev.selectAluB = packedCur.selectAluB;
-                    prev.selectAluB = cur.selectAluB;
-                }
-                else
-                {
-                    packedPrev.selectAluB = packedCur.selectAluA;
-                    prev.selectAluB = cur.selectAluA;
-                }
-                packedPrev.immediate = packedCur.immediate;
-                prev.immediate = cur.immediate;
-                
-                for (u32 popIdx = opIdx; popIdx < opCodeCount - 1; ++popIdx)
-                {
-                    (*opCodes)[popIdx] = (*opCodes)[popIdx + 1];
-                    (*opCodeBuilds)[popIdx] = (*opCodeBuilds)[popIdx + 1];
-                }
-                --buf_len_(*opCodes);
-                --buf_len_(*opCodeBuilds);
-                --opCodeCount;
-                --opIdx;
-                (*opCodes)[opIdx] = packedPrev;
-                (*opCodeBuilds)[opIdx] = prev;
-            }
-        }
-    }
+    buf_push(*opCodes, store);
 }
 
 int main(int argc, char **argv)
 {
+    // TODO(michiel): ROM Tables
+    // TODO(michiel): Make cordic example (slowly add iteration e.d.)
     int errors = 0;
     
     FileStream outputStream = {0};
@@ -833,22 +731,24 @@ int main(int argc, char **argv)
         //fprintf(stdout, "Tokenize file: %s\n", argv[1]);
         
         Token *tokens = tokenize_file(argv[1]);
+        if (tokens)
+        {
         Program *program = parse(tokens);
         OpCode *opCodes = 0;
-        OpCodeBuild *opCodeBuilds = 0;
         
         b32 synced = false;
         
         // print_tokens(tokens);
         print_parsed_program(outputStream, program);
-        
+            graph_program(program, "program.dot");
+            
         for (u32 stmtIdx = 0; stmtIdx < program->nrStatements; ++stmtIdx)
         {
             Statement *statement = program->statements + stmtIdx;
             
             if (statement->kind == STATEMENT_ASSIGN)
             {
-                push_assignment(statement->assign, &opCodes, &opCodeBuilds);
+                push_assignment(statement->assign, &opCodes);
             }
             else
             {
@@ -873,33 +773,73 @@ int main(int argc, char **argv)
             }
         }
 
-optimize_assignments(&opCodes, &opCodeBuilds);
-        optimize_read_setups(&opCodes, &opCodeBuilds);
-        optimize_combine_write(&opCodes, &opCodeBuilds);
-
+            opc_optimize_unused_alu(buf_len(opCodes), opCodes);
+            opc_optimize_mergers(buf_len(opCodes), opCodes);
+            
 #if 0
-        for (u32 opIdx = 0; opIdx < buf_len(opCodes); ++opIdx)
+        u32 prevCount = buf_len(opCodes);
+            fprintf(stdout, "Start optimize: %u\n", prevCount);
+            s32 maxSame = 4;
+            u32 iters = 0;
+        for (;;)
         {
-            OpCode opCode = opCodes[opIdx];
-            print_opcode(opCode, true);
+                optimize_alu_noop(&opCodes);
+                fprintf(stdout, "After Alu Noop: %u\n", buf_len(opCodes));
+                optimize_assignments(&opCodes);
+                fprintf(stdout, "After Assign  : %u\n", buf_len(opCodes));
+optimize_combine_write(&opCodes);
+                fprintf(stdout, "After Comb Wr : %u\n", buf_len(opCodes));
+                optimize_combine_read(&opCodes);
+                fprintf(stdout, "After Comb Rd : %u\n", buf_len(opCodes));
+                optimize_read_setups(&opCodes);
+                fprintf(stdout, "After Read set: %u\n", buf_len(opCodes));
+        
+            u32 curCount = buf_len(opCodes);
+                
+                fprintf(stdout, "After Assign  : %u\n", buf_len(opCodes));
+                fprintf(stdout, "After iter %3d: %u\n", ++iters, buf_len(opCodes));
+            if (curCount == prevCount)
+            {
+                    --maxSame;
+                }
+                if (maxSame <= 0)
+                {
+                break;
+            }
+            prevCount = curCount;
         }
         #endif
-        test_graph("testing.dot", gRegisterCount, buf_len(opCodeBuilds), opCodeBuilds, true);
-        save_graph("opcodes.dot", gRegisterCount, buf_len(opCodeBuilds), opCodeBuilds);
-        
-        OpCodeStats opCodeStats = get_opcode_stats(buf_len(opCodeBuilds), opCodeBuilds);
+
+        OpCodeStats opCodeStats = get_opcode_stats(buf_len(opCodes), opCodes);
         fprintf(stdout, "Stats:\n");
         fprintf(stdout, "  SEL: Max = %u, Bits = %u\n", opCodeStats.maxSelect, opCodeStats.selectBits);
         fprintf(stdout, "  ALU: Max = %u, Bits = %u\n", opCodeStats.maxAluOp, opCodeStats.aluOpBits);
         fprintf(stdout, "  IMM: Max = %u, Bits = %u\n", opCodeStats.maxImmediate, opCodeStats.immediateBits);
         fprintf(stdout, "  ADR: Max = %u, Bits = %u\n", opCodeStats.maxAddress, opCodeStats.addressBits);
+            
+            u32 inputs[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+            simulate(&opCodeStats, buf_len(opCodes), opCodes, array_count(inputs), inputs,
+                     100);
+            
+#if 1
+            FileStream printStream = {0};
+            printStream.file = fopen("opcodes.list", "wb");
+            printStream.verbose = true;
+        for (u32 opIdx = 0; opIdx < buf_len(opCodes); ++opIdx)
+        {
+            print_opcode(printStream, &opCodeStats, opCodes + opIdx);
+        }
+        #endif
+            test_graph("testing.dot", gRegisterCount, buf_len(opCodes), opCodes, false);
+            test_graph("opcodes.dot", gRegisterCount, buf_len(opCodes), opCodes, true);
+        //save_graph("opcodes.dot", gRegisterCount, buf_len(opCodes), opCodes);
         
         opCodeStats.synced = synced;
         opCodeStats.bitWidth = 8;
         
         FileStream opCodeStream = {0};
         opCodeStream.file = fopen("gen_opcodes.vhd", "wb");
-        generate_opcode_vhdl(&opCodeStats, opCodeBuilds, opCodeStream);
+        generate_opcode_vhdl(&opCodeStats, opCodes, opCodeStream);
         fclose(opCodeStream.file);
         
         opCodeStream.file = fopen("gen_controller.vhd", "wb");
@@ -917,6 +857,11 @@ optimize_assignments(&opCodes, &opCodeBuilds);
         opCodeStream.file = fopen("gen_cpu.vhd", "wb");
         generate_cpu_main(&opCodeStats, opCodeStream);
         fclose(opCodeStream.file);
+    }
+        else
+        {
+            fprintf(stderr, "Could not find file: %s\n", argv[1]);
+        }
     }
     else
     {

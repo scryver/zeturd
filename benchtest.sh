@@ -9,7 +9,7 @@ testDir="$codeDir/testbenches"
 buildDir="$curDir/gebouw"
 tbDir="$curDir/gebouw/tbs"
 
-./tool_build.sh
+./tool_build.sh "$curDir/swsrc/thurd.turd"
 
 mkdir -p "$tbDir"
 

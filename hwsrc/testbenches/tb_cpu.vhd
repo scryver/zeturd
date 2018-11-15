@@ -54,10 +54,10 @@ begin
         nrst <= '1';
         wait for 2 * TIME_DELTA;
         load <= '1';
-        wait for 20 * TIME_DELTA;
+        wait for 40 * TIME_DELTA;
         din <= X"51";
         load <= '0';
-        wait for 30 * TIME_DELTA;
+        wait for 200 * TIME_DELTA;
 
         eos <= '1';
         wait;
