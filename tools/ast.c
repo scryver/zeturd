@@ -442,12 +442,37 @@ print_ast(FileStream output, StmtList *statements)
     }
 }
 
+global Map gAstSymbols_;
+global Map *gAstSymbols = &gAstSymbols_;
+
 internal void
 free_expr(AstOptimizer *optimizer, Expr *expr)
 {
     expr->kind = Expr_None;
     expr->nextFree = optimizer->exprFreeList;
     optimizer->exprFreeList = expr;
+}
+
+internal s64
+execute_op(TokenKind op, s64 left, s64 right)
+{
+    s64 val = 0;
+    switch ((u32)op)
+    {
+        case TOKEN_POW: { val = (s64)(pow((f64)left, (f64)right)); } break;
+        case '*': { val = left * right; } break;
+        case '/': { i_expect(right); val = left / right; } break;
+        case TOKEN_SLL: { val = left << right; } break;
+        case TOKEN_SRA: { val = (s64)((s64)left >> (s64)right); } break;
+        case TOKEN_SRL: { val = (s64)((u64)left >> (u64)right); } break;
+        case '+': { val = left + right; } break;
+        case '-': { val = left - right; } break;
+        case '&': { val = left & right; } break;
+        case '^': { val = left ^ right; } break;
+        case '|': { val = left | right; } break;
+        INVALID_DEFAULT_CASE;
+    }
+    return val;
 }
 
 internal void
@@ -512,22 +537,7 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
             {
                 s64 left = expr->binary.left->intConst;
                 s64 right = expr->binary.right->intConst;
-                s64 val = 0;
-                switch ((u32)expr->binary.op)
-                {
-                    case TOKEN_POW: { val = (u64)pow((f64)left, (f64)right); } break;
-                    case '*': { val = left * right; } break;
-                    case '/': { i_expect(right); val = left / right; } break;
-                    case '&': { val = left & right; } break;
-                    case TOKEN_SLL: { val = left << right; } break;
-                    case TOKEN_SRA: { val = (s64)((s64)left >> (s64)right); } break;
-                    case TOKEN_SRL: { val = (s64)((u64)left >> (u64)right); } break;
-                    case '+': { val = left + right; } break;
-                    case '-': { val = left - right; } break;
-                    case '^': { val = left ^ right; } break;
-                    case '|': { val = left | right; } break;
-                    INVALID_DEFAULT_CASE;
-                }
+                s64 val = execute_op(expr->binary.op, left, right);
                 
                 free_expr(optimizer, expr->binary.left);
                 free_expr(optimizer, expr->binary.right);
@@ -547,7 +557,7 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
                     OpPrecedence leftOpP = get_op_precedence(leftOp);
                     
                     s64 leftVal = left->binary.right->intConst;
-                    s64 rightval = expr->binary.right->intConst;
+                    s64 rightVal = expr->binary.right->intConst;
                     s64 val = 0;
                     b32 update = false;
                     
@@ -562,21 +572,7 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
                     
                     if (execute)
                     {
-                        switch ((u32)op)
-                        {
-                            case TOKEN_POW: { val = (s64)(pow((f64)leftVal, (f64)rightval)); } break;
-                            case '*': { val = leftVal * rightval; } break;
-                            case '/': { i_expect(rightval); val = leftVal / rightval; } break;
-                            case TOKEN_SLL: { val = leftVal << rightval; } break;
-                            case TOKEN_SRA: { val = (s64)((s64)leftVal >> (s64)rightval); } break;
-                            case TOKEN_SRL: { val = (s64)((u64)leftVal >> (u64)rightval); } break;
-                            case '+': { val = leftVal + rightval; } break;
-                            case '-': { val = leftVal - rightval; } break;
-                            case '&': { val = leftVal & rightval; } break;
-                            case '^': { val = leftVal ^ rightval; } break;
-                            case '|': { val = leftVal | rightval; } break;
-                            INVALID_DEFAULT_CASE;
-                        }
+                         val = execute_op(op, leftVal, rightVal);
                         update = true;
                     }
                     else if (((op == '+') || (op == '-')) && 
@@ -589,12 +585,12 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
                         if (((op == '+') && (leftOp == '-')) ||
                             ((op == '-') && (leftOp == '+')))
                         {
-                            val = leftVal - rightval;
+                            val = leftVal - rightVal;
                             update = true;
                         }
                         else if ((op == '-') && (leftOp == '-'))
                         {
-                            val = leftVal + rightval;
+                            val = leftVal + rightVal;
                             update = true;
                         }
                         
@@ -623,8 +619,69 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
 }
 
 internal void
+insert_var_expr(AstOptimizer *optimizer, Expr *expr)
+{
+    switch (expr->kind)
+    {
+        
+        case Expr_Paren:
+        {
+            insert_var_expr(optimizer, expr->paren.expr);
+        } break;
+        
+        case Expr_Int:
+        {
+            // NOTE(michiel): Do nothing
+        } break;
+        
+        case Expr_Id:
+        {
+            if (!strings_are_equal(expr->name, create_string("IO")))
+            {
+                Expr *varExpr = map_get(gAstSymbols, expr->name.data);
+                if (varExpr)
+                {
+                    expr->kind = Expr_Paren;
+                    expr->paren.expr = varExpr;
+                }
+            }
+        } break;
+        
+        case Expr_Unary:
+        {
+            insert_var_expr(optimizer, expr->unary.expr);
+        } break;
+        
+        case Expr_Binary:
+        {
+            insert_var_expr(optimizer, expr->binary.left);
+            insert_var_expr(optimizer, expr->binary.right);
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+}
+
+internal void
 ast_optimize(AstOptimizer *optimizer)
 {
+
+#if 0    
+    for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
+    {
+        Stmt *stmt = optimizer->statements.stmts[stmtIdx];
+        if (stmt->kind == Stmt_Assign)
+        {
+            i_expect(stmt->assign.left->kind == Expr_Id);
+            if (!strings_are_equal(stmt->assign.left->name, create_string("IO")))
+            {
+                map_put(gAstSymbols, stmt->assign.left->name.data, stmt->assign.right);
+            }
+            insert_var_expr(optimizer, stmt->assign.right);
+            }
+    }
+    #endif
+
     for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
     {
         Stmt *stmt = optimizer->statements.stmts[stmtIdx];
@@ -632,7 +689,7 @@ ast_optimize(AstOptimizer *optimizer)
         {
             combine_const(optimizer, stmt->assign.left);
             combine_const(optimizer, stmt->assign.right);
-        }
+            }
         else
         {
             combine_const(optimizer, stmt->expr);

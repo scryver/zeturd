@@ -25,10 +25,37 @@ graph_token_expr4(TokenGraph *graph, Token **token, String connection)
     if ((*token)->kind == TOKEN_NUMBER)
     {
         // NOTE(michiel): Calc something
-        String number = create_string_fmt("%.*s%d", (*token)->value.size, (*token)->value.data,
-                                          graph->id++);
+        String number = (*token)->value;
+        if ((number.size > 1) && (number.data[0] == '0'))
+        {
+            if ((number.data[1] == 'b') || (number.data[1] == 'B'))
+            {
+                number = create_string_fmt("bin%.*s%d", 
+                                           (*token)->value.size, (*token)->value.data,
+                                           graph->id++);
+            }
+            else if ((number.data[1] == 'x') || (number.data[1] == 'X'))
+            {
+                number = create_string_fmt("hex%.*s%d", 
+                                           (*token)->value.size, (*token)->value.data,
+                                           graph->id++);
+            }
+            else
+            {
+                number = create_string_fmt("oct%.*s%d", 
+                                           (*token)->value.size, (*token)->value.data,
+                                           graph->id++);
+            }
+        }
+        else
+        {
+            number = create_string_fmt("%.*s%d", (*token)->value.size, (*token)->value.data,
+                                graph->id++);
+        }
+        
         fprintf(graph->output.file, "  %.*s [label=\"%.*s\"];\n", number.size, number.data,
                 (*token)->value.size, (*token)->value.data);
+        
         if (connection.size)
         {
             fprintf(graph->output.file, "  %.*s -> %.*s;\n", connection.size, connection.data,
