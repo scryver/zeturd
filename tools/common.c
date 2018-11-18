@@ -133,3 +133,59 @@ str_internalize_cstring(char *cString)
     String str = create_string(cString);
     return str_internalize(str);
 }
+
+internal inline String
+create_string_fmt(char *fmt, ...)
+{
+    static char buffer[4096];
+    
+    va_list args;
+    va_start(args, fmt);
+    u64 written = vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+    
+    i_expect(written < sizeof(buffer));
+    buffer[written] = 0;
+    return str_internalize_cstring(buffer);
+}
+
+internal s64
+string_to_number(String s)
+{
+    s64 result = 0;
+    s64 base = 10;
+    if ((s.size > 2) &&
+        (s.data[0] == '0'))
+    {
+        if ((s.data[1] == 'b') ||
+            (s.data[1] == 'B'))
+        {
+            base = 2;
+            --s.size;
+            ++s.data;
+        }
+        else if ((s.data[1] == 'x') ||
+                 (s.data[1] == 'X'))
+        {
+            base = 16;
+            --s.size;
+            ++s.data;
+        }
+        else
+        {
+            base = 8;
+        }
+        --s.size;
+        ++s.data;
+    }
+    
+    for (u32 sIdx = 0; sIdx < s.size; ++sIdx)
+    {
+        result *= base;
+        s64 adding = s.data[sIdx] - '0';
+        i_expect(adding >= 0);
+        i_expect(adding < base);
+        result += adding;
+    }
+    return result;
+}

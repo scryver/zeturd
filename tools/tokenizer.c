@@ -270,9 +270,9 @@ tokenize_file(char *filename)
 #define CASE(name) case TOKEN_##name: { fprintf(fileStream.file, #name); } break
 #define CASEc(name) case name: { fprintf(fileStream.file, "%c", name); } break
 internal void
-print_token_kind(FileStream fileStream, Token *token)
+print_token_kind(FileStream fileStream, TokenKind kind)
 {
-    switch ((u32)token->kind)
+    switch ((u32)kind)
     {
         CASE(NULL);
         CASE(NUMBER);
@@ -310,7 +310,7 @@ print_token(FileStream fileStream, Token *token)
 {
     fprintf(fileStream.file, "%.*s:%d:%d < ", token->filename.size, token->filename.data,
             token->lineNumber, token->colNumber);
-    print_token_kind(fileStream, token);
+    print_token_kind(fileStream, token->kind);
     if (token->kind == '\n')
     {
         fprintf(fileStream.file, ",\\n");

@@ -23,6 +23,8 @@ pushd "$buildDir" > /dev/null
 
 clang $flags $exceptions "$codeDir/opcode_generator.c" -o opcode-gen
 ./opcode-gen "$sourceFile"
+dot -Tsvg tokens.dot -o tokens.svg
+dot -Tsvg ast.dot -o ast.svg
 dot -Tsvg opcodes.dot -o opcodes.svg
 dot -Tsvg testing.dot -o testing.svg
 dot -Tsvg program_preop.dot -o program_preop.svg

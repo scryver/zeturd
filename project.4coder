@@ -1,0 +1,27 @@
+version(1);
+project_name = "ZeTurd";
+patterns = {
+"*.c",
+"*.cpp",
+"*.h",
+"*.m",
+"*.bat",
+"*.sh",
+"*.4coder",
+};
+blacklist_patterns = {
+".*",
+};
+load_paths_base = {
+ { "tools", .relative = true, .recursive = true, },
+};
+load_paths = {
+ { load_paths_base, .os = "linux", },
+};
+
+command_list = {
+ { .name = "build",
+   .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
+   .cmd = { { "./tool_build.sh", .os = "linux" }, }, },
+};
+fkey_command[1] = "build";

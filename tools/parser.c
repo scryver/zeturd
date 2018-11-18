@@ -1,53 +1,12 @@
 global Map gIdentifierMap_ = {0};
 global Map *gIdentifierMap = &gIdentifierMap_;
 
-internal s32
-parse_number(String s)
-{
-    s32 result = 0;
-    s32 base = 10;
-    if ((s.size > 2) &&
-        (s.data[0] == '0'))
-    {
-        if ((s.data[1] == 'b') ||
-            (s.data[1] == 'B'))
-        {
-            base = 2;
-            --s.size;
-            ++s.data;
-        }
-        else if ((s.data[1] == 'x') ||
-                 (s.data[1] == 'X'))
-        {
-            base = 16;
-            --s.size;
-            ++s.data;
-        }
-        else
-        {
-            base = 8;
-        }
-        --s.size;
-        ++s.data;
-    }
-
-    for (u32 sIdx = 0; sIdx < s.size; ++sIdx)
-    {
-        result *= base;
-        s32 adding = s.data[sIdx] - '0';
-        i_expect(adding >= 0);
-        i_expect(adding < base);
-        result += adding;
-    }
-    return result;
-}
-
 internal Constant *
 parse_constant(Token **at)
 {
     i_expect((*at)->kind == TOKEN_NUMBER);
     Constant *result = allocate_struct(Constant, 0);
-    result->value = parse_number((*at)->value);
+    result->value = (u32)string_to_number((*at)->value);
     *at = (*at)->nextToken;
     return result;
 }
