@@ -16,12 +16,13 @@ fi
 
 flags="-O0 -g -ggdb -Wall -Werror -pedantic"
 exceptions="-Wno-unused-function -Wno-missing-braces"
+libs="-lm"
 
 mkdir -p "$buildDir"
 
 pushd "$buildDir" > /dev/null
 
-clang $flags $exceptions "$codeDir/opcode_generator.c" -o opcode-gen
+clang $flags $exceptions "$codeDir/opcode_generator.c" -o opcode-gen $libs
 ./opcode-gen "$sourceFile"
 dot -Tsvg tokens.dot -o tokens.svg
 dot -Tsvg ast.dot -o ast.svg

@@ -8,4 +8,4 @@ IO = Z
 W = X + Y
 V = X | Y
 U = W & V
-IO = U
+IO = U * 4 ** 3 ** 2

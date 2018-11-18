@@ -2,6 +2,16 @@ typedef enum TokenKind
 {
     TOKEN_NULL,
     
+    TOKEN_MUL = '*',
+    TOKEN_DIV = '/',
+    // TODO(michiel): etc..
+    
+    TOKEN_ADD = '+',
+    TOKEN_SUB = '-',
+    
+    TOKEN_ADDR = '@',
+    TOKEN_DEREF = '$',
+    
     TOKEN_NUMBER = 128,
     TOKEN_ID,
     TOKEN_INC,
@@ -10,6 +20,10 @@ typedef enum TokenKind
     TOKEN_SLL,
     TOKEN_SRL,
     TOKEN_SRA,
+    
+    TOKEN_POW, // TODO(michiel): Implement (what to use?)
+    // maybe ** and do something else for addresses and dereferences
+    // like @ for address and $ for dereference
 
 TOKEN_EOF,
 

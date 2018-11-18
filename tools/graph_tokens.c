@@ -19,7 +19,7 @@ typedef struct TokenGraph
 internal String graph_token_expr(TokenGraph *graph, Token **token, String connection);
 
 internal String
-graph_token_expr3(TokenGraph *graph, Token **token, String connection)
+graph_token_expr4(TokenGraph *graph, Token **token, String connection)
 {
     String result = {0};
     if ((*token)->kind == TOKEN_NUMBER)
@@ -84,7 +84,7 @@ graph_token_expr3(TokenGraph *graph, Token **token, String connection)
 }
 
 internal String
-graph_token_expr2(TokenGraph *graph, Token **token, String connection)
+graph_token_expr3(TokenGraph *graph, Token **token, String connection)
 {
     String result;
     if ((*token)->kind == '-')
@@ -98,17 +98,44 @@ graph_token_expr2(TokenGraph *graph, Token **token, String connection)
                     minus.size, minus.data);
         }
         *token = (*token)->nextToken;
-        result = graph_token_expr3(graph, token, minus);
+        result = graph_token_expr4(graph, token, minus);
         fprintf(graph->output.file, "  %.*s -> %.*s;\n", minus.size, minus.data, 
                 result.size, result.data);
         result = minus;
     }
     else
     {
-        result = graph_token_expr3(graph, token, connection);
+        result = graph_token_expr4(graph, token, connection);
     }
     
     return result;
+}
+
+internal String
+graph_token_expr2(TokenGraph *graph, Token **token, String connection)
+{
+    String left = graph_token_expr3(graph, token, (String){0,0});
+    String op = left;
+    
+    while ((*token)->kind == TOKEN_POW)
+    {
+        op = create_string_fmt("op%d", graph->id++);
+        fprintf(graph->output.file, "  %.*s [label=\"**\"];\n", op.size, op.data);
+        *token = (*token)->nextToken;
+        graph_token_expr2(graph, token, op);
+        
+        fprintf(graph->output.file, "  %.*s -> %.*s;\n", op.size, op.data,
+                left.size, left.data);
+        left = op;
+    }
+    
+    if (connection.size)
+    {
+        fprintf(graph->output.file, "  %.*s -> %.*s;\n", connection.size, connection.data,
+                op.size, op.data);
+    }
+    
+    return op;
 }
 
 internal String

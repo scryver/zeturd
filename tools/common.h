@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <memory.h>
 #include <assert.h>
+#include <math.h>
 
 #define internal  static
 #define global    static

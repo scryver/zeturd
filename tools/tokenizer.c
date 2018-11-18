@@ -79,12 +79,14 @@ tokenize(Buffer buffer, String filename)
             CASE1(')');
             CASE1('!');
             CASE1('~');
-            CASE1('*');
             CASE1('/');
             CASE1('&');
             CASE1('|');
             CASE1('^');
+            CASE1('@');
+            CASE1('$');
             
+            CASE2('*', '*', TOKEN_POW);
             CASE2('-', '-', TOKEN_DEC);
             CASE2('+', '+', TOKEN_INC);
             

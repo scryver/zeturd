@@ -720,75 +720,6 @@ push_assignment(Assignment *assign, OpCode **opCodes)
     buf_push(*opCodes, store);
 }
 
-internal void
-print_expr(Expr *expr)
-{
-    switch (expr->kind)
-    {
-        case Expr_Paren:
-        {
-            fprintf(stdout, "(");
-            print_expr(expr->paren.expr);
-            fprintf(stdout, ")");
-        } break;
-        
-        case Expr_Int:
-        {
-            fprintf(stdout, "%ld", expr->intConst);
-        } break;
-        
-        case Expr_Id:
-        {
-            fprintf(stdout, "%.*s", expr->name.size, expr->name.data);
-        } break;
-        
-        case Expr_Unary:
-        {
-            fprintf(stdout, "[unary ");
-            if (expr->unary.op == TOKEN_INC)
-            {
-                fprintf(stdout, "++");
-            }
-            else if (expr->unary.op == TOKEN_DEC)
-            {
-                fprintf(stdout, "--");
-            }
-            else
-            {
-                fprintf(stdout, "%c", expr->unary.op);
-            }
-            print_expr(expr->unary.expr);
-            fprintf(stdout, "]");
-        } break;
-        
-        case Expr_Binary:
-        {
-            fprintf(stdout, "[binary ");
-            print_expr(expr->binary.left);
-            if (expr->binary.op == TOKEN_SLL)
-            {
-                fprintf(stdout, "<<");
-            }
-            else if (expr->binary.op == TOKEN_SRA)
-            {
-                fprintf(stdout, ">>");
-            }
-            else if (expr->binary.op == TOKEN_SRL)
-            {
-                fprintf(stdout, ">>>");
-            }
-            else
-            {
-                fprintf(stdout, "%c", expr->binary.op);
-            }
-            print_expr(expr->binary.right);
-            fprintf(stdout, "]");
-        } break;
-        
-        INVALID_DEFAULT_CASE;
-    }
-}
-
 int main(int argc, char **argv)
 {
     // TODO(michiel): ROM Tables
@@ -811,28 +742,9 @@ int main(int argc, char **argv)
             
             AstOptimizer astOptimizer = {0};
             astOptimizer.statements = *stmts;
-            
-            for (u32 stmtIdx = 0; stmtIdx < stmts->stmtCount; ++stmtIdx)
-            {
-                Stmt *stmt = stmts->stmts[stmtIdx];
-                fprintf(stdout, "Stmt %d:\n", stmtIdx);
-                if (stmt->kind == Stmt_Assign)
-                {
-                    fprintf(stdout, "  assign: ");
-                    print_expr(stmt->assign.left);
-                    fprintf(stdout, " = ");
-                    combine_const(&astOptimizer, stmt->assign.right);
-                    print_expr(stmt->assign.right);
-                }
-                else
-                {
-                    i_expect(stmt->kind == Stmt_Hint);
-                    fprintf(stdout, "  hint: ");
-                    print_expr(stmt->expr);
-                }
-                fprintf(stdout, "\n");
-            }
+            ast_optimize(&astOptimizer);
             graph_ast(stmts, "ast.dot");
+            print_ast((FileStream){.file=stdout}, stmts);
             
             u32 trimmed = 0;
             for (Expr *fre = astOptimizer.exprFreeList;

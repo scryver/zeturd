@@ -238,31 +238,39 @@ typedef enum OpAssociativity
 } OpAssociativity;
 typedef struct OpPrecedence
 {
-    u32 level;
+    u32 level;       // NOTE(michiel): Higher level gets priority
+    b32 commutative; // NOTE(michiel): A op B == B op A
     TokenKind op;
     OpAssociativity associate;
 } OpPrecedence;
 
 global OpPrecedence gOpPrecedence[NUM_TOKENS] =
 {
-    ['*']       = {6, '*',       Associate_LeftToRight},
-    ['/']       = {6, '/',       Associate_LeftToRight},
-    [TOKEN_SLL] = {5, TOKEN_SLL, Associate_LeftToRight},
-    [TOKEN_SRA] = {5, TOKEN_SRA, Associate_LeftToRight},
-    [TOKEN_SRL] = {5, TOKEN_SRL, Associate_LeftToRight},
-    ['+']       = {4, '+',       Associate_LeftToRight},
-    ['-']       = {4, '-',       Associate_LeftToRight},
-    ['&']       = {3, '&',       Associate_LeftToRight},
-    ['^']       = {2, '^',       Associate_LeftToRight},
-    ['|']       = {1, '|',       Associate_LeftToRight},
+    [TOKEN_POW] = {7, false, TOKEN_POW, Associate_RightToLeft},
+    ['*']       = {6, true,  '*',       Associate_LeftToRight},
+    ['/']       = {6, true,  '/',       Associate_LeftToRight},
+    [TOKEN_SLL] = {5, false, TOKEN_SLL, Associate_LeftToRight},
+    [TOKEN_SRA] = {5, false, TOKEN_SRA, Associate_LeftToRight},
+    [TOKEN_SRL] = {5, false, TOKEN_SRL, Associate_LeftToRight},
+    ['+']       = {4, true,  '+',       Associate_LeftToRight},
+    ['-']       = {4, false, '-',       Associate_LeftToRight},
+    ['&']       = {3, true,  '&',       Associate_LeftToRight},
+    ['^']       = {2, true,  '^',       Associate_LeftToRight},
+    ['|']       = {1, true,  '|',       Associate_LeftToRight},
 };
 
 internal inline OpPrecedence
-get_op_precedence(AstParser *parser)
+get_op_precedence(TokenKind op)
+{
+    i_expect(op < NUM_TOKENS);
+    return gOpPrecedence[op];
+}
+
+internal inline OpPrecedence
+ast_get_op_precedence(AstParser *parser)
 {
     i_expect(parser->current);
-    i_expect(parser->current->kind < NUM_TOKENS);
-    return gOpPrecedence[parser->current->kind];
+    return get_op_precedence(parser->current->kind);
 }
 
 internal Expr *
@@ -270,7 +278,7 @@ ast_expression_operator(AstParser *parser, u32 precedenceLevel)
 {
     Expr *expr = ast_expression_unary(parser);
     
-    OpPrecedence opP = get_op_precedence(parser);
+    OpPrecedence opP = ast_get_op_precedence(parser);
     while ((opP.associate != Associate_None) &&
            (opP.level >= precedenceLevel))
         {
@@ -287,72 +295,15 @@ ast_expression_operator(AstParser *parser, u32 precedenceLevel)
                                       ast_expression_operator(parser, opP.level));
             }
         
-        opP = get_op_precedence(parser);
+        opP = ast_get_op_precedence(parser);
          }
     
-    return expr;
-}
-
-internal b32
-is_mul_op(AstParser *parser)
-{
-    b32 result = false;
-    if (is_token(parser, '*') ||
-        is_token(parser, '/') ||
-        is_token(parser, '&') ||
-        is_token(parser, TOKEN_SLL) ||
-        is_token(parser, TOKEN_SRA) ||
-        is_token(parser, TOKEN_SRL))
-    {
-    result = true;
-    }
-    return result;
-}
-
-internal Expr *
-ast_expression_mul(AstParser *parser)
-{
-    Expr *expr = ast_expression_unary(parser);
-    while (is_mul_op(parser))
-    {
-        TokenKind op = parser->current->kind;
-        ast_next_token(parser);
-        expr = create_binary_expr(op, expr, ast_expression_unary(parser));
-    }
-    return expr;
-}
-
-internal b32
-is_add_op(AstParser *parser)
-{
-    b32 result = false;
-    if (is_token(parser, '+') ||
-        is_token(parser, '-') ||
-        is_token(parser, '^') ||
-        is_token(parser, '|'))
-    {
-    result = true;
-    }
-    return result;
-}
-
-internal Expr *
-ast_expression_add(AstParser *parser)
-{
-    Expr *expr = ast_expression_mul(parser);
-    while (is_add_op(parser))
-    {
-        TokenKind op = parser->current->kind;
-        ast_next_token(parser);
-        expr = create_binary_expr(op, expr, ast_expression_mul(parser));
-    }
     return expr;
 }
 
 internal Expr *
 ast_expression(AstParser *parser)
 {
-    //return ast_expression_add(parser);
     return ast_expression_operator(parser, 0);
 }
 
@@ -416,6 +367,79 @@ ast_from_tokens(Token *tokens)
     }
     
     return result;
+}
+
+internal void
+print_expr(Expr *expr)
+{
+    switch (expr->kind)
+    {
+        case Expr_Paren: { 
+            fprintf(stdout, "(");
+            print_expr(expr->paren.expr);
+            fprintf(stdout, ")");
+        } break;
+        
+        case Expr_Int: { fprintf(stdout, "%ld", expr->intConst); } break;
+        case Expr_Id:  { fprintf(stdout, "%.*s", expr->name.size, expr->name.data); } break;
+        
+        case Expr_Unary:
+        {
+            fprintf(stdout, "[");
+            switch (expr->unary.op)
+            {
+                case TOKEN_INC: { fprintf(stdout, "++"); } break;
+                case TOKEN_DEC: { fprintf(stdout, "--"); } break;
+                default:        { fprintf(stdout, "%c", expr->unary.op); } break;
+            }
+            print_expr(expr->unary.expr);
+            fprintf(stdout, "]");
+        } break;
+        
+        case Expr_Binary:
+        {
+            fprintf(stdout, "[");
+            switch (expr->binary.op)
+            {
+                case TOKEN_POW: { fprintf(stdout, "**"); } break;
+                case TOKEN_SLL: { fprintf(stdout, "<<"); } break;
+                case TOKEN_SRA: { fprintf(stdout, ">>"); } break;
+                case TOKEN_SRL: { fprintf(stdout, ">>>"); } break;
+                default:        { fprintf(stdout, "%c", expr->binary.op); } break;
+            }
+            fprintf(stdout, " ");
+            print_expr(expr->binary.left);
+            fprintf(stdout, " ");
+            print_expr(expr->binary.right);
+            fprintf(stdout, "]");
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+}
+
+internal void
+print_ast(FileStream output, StmtList *statements)
+{
+    for (u32 stmtIdx = 0; stmtIdx < statements->stmtCount; ++stmtIdx)
+    {
+        Stmt *stmt = statements->stmts[stmtIdx];
+        fprintf(output.file, "Stmt %d:\n", stmtIdx);
+        if (stmt->kind == Stmt_Assign)
+        {
+            fprintf(output.file, "  assign: ");
+            print_expr(stmt->assign.left);
+            fprintf(output.file, " = ");
+            print_expr(stmt->assign.right);
+        }
+        else
+        {
+            i_expect(stmt->kind == Stmt_Hint);
+            fprintf(output.file, "  hint: ");
+            print_expr(stmt->expr);
+        }
+        fprintf(output.file, "\n");
+    }
 }
 
 internal void
@@ -491,6 +515,7 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
                 s64 val = 0;
                 switch ((u32)expr->binary.op)
                 {
+                    case TOKEN_POW: { val = (u64)pow((f64)left, (f64)right); } break;
                     case '*': { val = left * right; } break;
                     case '/': { i_expect(right); val = left / right; } break;
                     case '&': { val = left & right; } break;
@@ -517,134 +542,69 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
                     (expr->binary.left->binary.right->kind == Expr_Int))
                 {
                     TokenKind op = expr->binary.op;
+                    OpPrecedence opP = get_op_precedence(op);
                     TokenKind leftOp = left->binary.op;
+                    OpPrecedence leftOpP = get_op_precedence(leftOp);
                     
                     s64 leftVal = left->binary.right->intConst;
                     s64 rightval = expr->binary.right->intConst;
                     s64 val = 0;
                     b32 update = false;
                     
-                    switch ((u32)op)
+                    // NOTE(michiel): If the left operator is of lesser precedence than the
+                    // current or they are the same and commutative or they are the same and
+                    // it is right associative.
+                    // TODO(michiel): Right associativity handling
+                    b32 execute = ((leftOpP.level < opP.level) ||
+                                   ((opP.op == leftOpP.op) && 
+                                    (opP.commutative || 
+                                     (opP.associate == Associate_RightToLeft))));
+                    
+                    if (execute)
                     {
-                        case '*': {
-                            if ((leftOp == '*') ||
-                                (leftOp == '+') ||
-                                (leftOp == '-') ||
-                                (leftOp == '^') ||
-                                (leftOp == '|'))
-                            {
-                                val = leftVal * rightval;
-                                update = true; 
-                            }
-                        } break;
-                        
-                        case '/': {
-                            if ((leftOp == '*') ||
-                                (leftOp == '+') ||
-                                (leftOp == '-') ||
-                                (leftOp == '^') ||
-                                (leftOp == '|'))
-                            {
-                                i_expect(rightval);
-                                val = leftVal / rightval;
-                                update = true;
-                            }
-                        } break;
-                        
-                        case '&': {
-                            if ((leftOp == '&') ||
-                                (leftOp == '+') ||
-                                (leftOp == '-') ||
-                                (leftOp == '^') ||
-                                (leftOp == '|'))
-                            {
-                                val = leftVal & rightval;
-                                update = true; 
-                            }
-                        } break;
-                        
-                        case TOKEN_SLL: {
-                            if ((leftOp == '+') ||
-                                (leftOp == '-') ||
-                                (leftOp == '^') ||
-                                (leftOp == '|'))
-                            {
-                                val = leftVal << rightval;
-                                update = true; 
-                            }
-                        } break;
-                        
-                        case TOKEN_SRA: {
-                            if ((leftOp == '+') ||
-                                (leftOp == '-') ||
-                                (leftOp == '^') ||
-                                (leftOp == '|'))
-                            {
-                                val = (s64)((s64)leftVal >> (s64)rightval);
-                                update = true; 
-                            }
-                        } break;
-                        
-                        case TOKEN_SRL: {
-                            if ((leftOp == '+') ||
-                                (leftOp == '-') ||
-                                (leftOp == '^') ||
-                                (leftOp == '|'))
-                            {
-                                val = (s64)((u64)leftVal >> (u64)rightval);
-                                update = true; 
-                            }
-                        } break;
-                        
-                        case '+': {
-                            if ((leftOp == '+') ||
-                                (leftOp == '^') ||
-                                (leftOp == '|'))
-                            {
-                                val = leftVal + rightval;
-                                update = true;
-                            }
-                            else if (leftOp == '-')
-                            {
-                                val = leftVal - rightval;
-                                update = true;
-                            }
-                        } break;
-                        
-                        case '-': { 
-                            if ((leftOp == '+') ||
-                                (leftOp == '^') ||
-                                (leftOp == '|'))
-                            {
-                                val = leftVal - rightval;
-                                update = true;
-                            }
-                            else if (leftOp == '-')
-                            {
-                                val = leftVal + rightval;
-                                update = true;
-                            }
-                        } break;
-                        
-                        case '^': {
-                            if ((leftOp == '^') ||
-                                (leftOp == '|'))
-                            {
-                                val = leftVal ^ rightval;
-                                update = true; 
-                            }
-                        } break;
-                        
-                        case '|': {
-                            if (leftOp == '|')
-                            {
-                                val = leftVal | rightval;
-                                update = true; 
-                            }
-                        } break;
-                        
-                        INVALID_DEFAULT_CASE;
+                        switch ((u32)op)
+                        {
+                            case TOKEN_POW: { val = (s64)(pow((f64)leftVal, (f64)rightval)); } break;
+                            case '*': { val = leftVal * rightval; } break;
+                            case '/': { i_expect(rightval); val = leftVal / rightval; } break;
+                            case TOKEN_SLL: { val = leftVal << rightval; } break;
+                            case TOKEN_SRA: { val = (s64)((s64)leftVal >> (s64)rightval); } break;
+                            case TOKEN_SRL: { val = (s64)((u64)leftVal >> (u64)rightval); } break;
+                            case '+': { val = leftVal + rightval; } break;
+                            case '-': { val = leftVal - rightval; } break;
+                            case '&': { val = leftVal & rightval; } break;
+                            case '^': { val = leftVal ^ rightval; } break;
+                            case '|': { val = leftVal | rightval; } break;
+                            INVALID_DEFAULT_CASE;
+                        }
+                        update = true;
                     }
+                    else if (((op == '+') || (op == '-')) && 
+                             ((leftOp == '+') || (leftOp == '-')))
+                    {
+                        // NOTE(michiel): If we got X - 2 + 3 we can combine it to X + 1
+                        // X - 2 + 3 => X + (-2 + 3) => X + (3 - 2) => X - -(3 - 2)
+                        // X - (2 - 3) => X - -1
+                        
+                        if (((op == '+') && (leftOp == '-')) ||
+                            ((op == '-') && (leftOp == '+')))
+                        {
+                            val = leftVal - rightval;
+                            update = true;
+                        }
+                        else if ((op == '-') && (leftOp == '-'))
+                        {
+                            val = leftVal + rightval;
+                            update = true;
+                        }
+                        
+                        if (update && (val < 0))
+                        {
+                            // NOTE(michiel): Switch op and negate
+                            leftOp = (leftOp == '+') ? '-' : '+';
+                            val = -val;
+                        }
+                        }
                     
                     if (update)
                     {
@@ -652,8 +612,8 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
                         expr->binary.left = left->binary.left;
                         expr->binary.right->intConst = val;
                         free_expr(optimizer, left->binary.right);
-                    free_expr(optimizer, left);
-                        }
+                        free_expr(optimizer, left);
+                    }
                 }
             }
         } break;
@@ -662,3 +622,22 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
     }
 }
 
+internal void
+ast_optimize(AstOptimizer *optimizer)
+{
+    for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
+    {
+        Stmt *stmt = optimizer->statements.stmts[stmtIdx];
+        if (stmt->kind == Stmt_Assign)
+        {
+            combine_const(optimizer, stmt->assign.left);
+            combine_const(optimizer, stmt->assign.right);
+        }
+        else
+        {
+            combine_const(optimizer, stmt->expr);
+        }
+    }
+}
+
+// TODO(michiel): print immediate repr
