@@ -456,187 +456,6 @@ free_expr(AstOptimizer *optimizer, Expr *expr)
     optimizer->exprFreeList = expr;
 }
 
-global Map gConstSymbols_;
-global Map *gConstSymbols = &gConstSymbols_;
-
-internal s64
-execute_op(TokenKind op, s64 left, s64 right)
-{
-    s64 val = 0;
-    switch ((u32)op)
-    {
-        case TOKEN_POW: { val = (s64)(pow((f64)left, (f64)right)); } break;
-        case '*': { val = left * right; } break;
-        case '/': { i_expect(right); val = left / right; } break;
-        case TOKEN_SLL: { val = left << right; } break;
-        case TOKEN_SRA: { val = (s64)((s64)left >> (s64)right); } break;
-        case TOKEN_SRL: { val = (s64)((u64)left >> (u64)right); } break;
-        case '+': { val = left + right; } break;
-        case '-': { val = left - right; } break;
-        case '&': { val = left & right; } break;
-        case '^': { val = left ^ right; } break;
-        case '|': { val = left | right; } break;
-        INVALID_DEFAULT_CASE;
-    }
-    return val;
-}
-
-internal void
-combine_const(AstOptimizer *optimizer, Expr *expr)
-{
-    // NOTE(michiel): Doubles as remover of extra parenthesis
-    
-    switch (expr->kind)
-    {
-        case Expr_Paren:
-        {
-            if (expr->paren.expr->kind == Expr_Paren)
-            {
-                Expr *parenExpr = expr->paren.expr;
-                expr->paren.expr = parenExpr->paren.expr;
-                free_expr(optimizer, parenExpr);
-            }
-            
-            combine_const(optimizer, expr->paren.expr);
-            if (expr->paren.expr->kind == Expr_Int)
-            {
-                Expr *parenExpr = expr->paren.expr;
-                s64 val = parenExpr->intConst;
-                expr->kind = Expr_Int;
-                expr->intConst = val;
-                free_expr(optimizer, parenExpr);
-            }
-        } break;
-        
-        case Expr_Int:
-        {
-            // NOTE(michiel): Do nothing
-        } break;
-        
-        case Expr_Id:
-        {
-            // NOTE(michiel): If last time it was assigned a constant value
-            Expr *constant = map_get(gConstSymbols, expr->name.data);
-            if (constant)
-            {
-                expr->kind = Expr_Int;
-                expr->intConst = constant->intConst;
-            }
-        } break;
-        
-        case Expr_Unary:
-        {
-            combine_const(optimizer, expr->unary.expr);
-            Expr *unaryExpr = expr->unary.expr;
-            if (unaryExpr->kind == Expr_Int)
-            {
-                s64 val = unaryExpr->intConst;
-                switch ((u32)expr->unary.op)
-                {
-                    case '+': { } break;
-                    case '-': { val = -val; } break;
-                    case '~': { val = ~val; } break;
-                    case '!': { val = !val; } break;
-                    case TOKEN_INC: { val = val + 1; } break;
-                    case TOKEN_DEC: { val = val - 1; } break;
-                    INVALID_DEFAULT_CASE;
-                }
-                expr->kind = Expr_Int;
-                expr->intConst = val;
-                free_expr(optimizer, unaryExpr);
-            }
-        } break;
-        
-        case Expr_Binary:
-        {
-            combine_const(optimizer, expr->binary.left);
-            combine_const(optimizer, expr->binary.right);
-            if ((expr->binary.left->kind == Expr_Int) &&
-                (expr->binary.right->kind == Expr_Int))
-            {
-                s64 left = expr->binary.left->intConst;
-                s64 right = expr->binary.right->intConst;
-                s64 val = execute_op(expr->binary.op, left, right);
-                
-                free_expr(optimizer, expr->binary.left);
-                free_expr(optimizer, expr->binary.right);
-                expr->kind = Expr_Int;
-                expr->intConst = val;
-            }
-            else if (expr->binary.right->kind == Expr_Int)
-            {
-                Expr *left = expr->binary.left;
-                
-                if ((expr->binary.left->kind == Expr_Binary) &&
-                    (expr->binary.left->binary.right->kind == Expr_Int))
-                {
-                    TokenKind op = expr->binary.op;
-                    OpPrecedence opP = get_op_precedence(op);
-                    TokenKind leftOp = left->binary.op;
-                    OpPrecedence leftOpP = get_op_precedence(leftOp);
-                    
-                    s64 leftVal = left->binary.right->intConst;
-                    s64 rightVal = expr->binary.right->intConst;
-                    s64 val = 0;
-                    b32 update = false;
-                    
-                    // NOTE(michiel): If the left operator is of lesser precedence than the
-                    // current or they are the same and commutative or they are the same and
-                    // it is right associative.
-                    // TODO(michiel): Right associativity handling
-                    b32 execute = ((leftOpP.level < opP.level) ||
-                                   ((opP.op == leftOpP.op) && 
-                                    (opP.commutative || 
-                                     (opP.associate == Associate_RightToLeft))));
-                    
-                    if (execute)
-                    {
-                         val = execute_op(op, leftVal, rightVal);
-                        update = true;
-                    }
-                    else if (((op == '+') || (op == '-')) && 
-                             ((leftOp == '+') || (leftOp == '-')))
-                    {
-                        // NOTE(michiel): If we got X - 2 + 3 we can combine it to X + 1
-                        // X - 2 + 3 => X + (-2 + 3) => X + (3 - 2) => X - -(3 - 2)
-                        // X - (2 - 3) => X - -1
-                        
-                        if (((op == '+') && (leftOp == '-')) ||
-                            ((op == '-') && (leftOp == '+')))
-                        {
-                            val = leftVal - rightVal;
-                            update = true;
-                        }
-                        else if ((op == '-') && (leftOp == '-'))
-                        {
-                            val = leftVal + rightVal;
-                            update = true;
-                        }
-                        
-                        if (update && (val < 0))
-                        {
-                            // NOTE(michiel): Switch op and negate
-                            leftOp = (leftOp == '+') ? '-' : '+';
-                            val = -val;
-                        }
-                        }
-                    
-                    if (update)
-                    {
-                        expr->binary.op = leftOp;
-                        expr->binary.left = left->binary.left;
-                        expr->binary.right->intConst = val;
-                        free_expr(optimizer, left->binary.right);
-                        free_expr(optimizer, left);
-                    }
-                }
-            }
-        } break;
-        
-        INVALID_DEFAULT_CASE;
-    }
-}
-
 global Map gAstSymbols_;
 global Map *gAstSymbols = &gAstSymbols_;
 
@@ -749,6 +568,369 @@ insert_var_names(AstOptimizer *optimizer, Expr *expr, b32 isAssign)
     }
 }
 
+internal b32
+collapse_parenthesis(AstOptimizer *optimizer, Expr *expr)
+{
+    b32 result = false; // NOTE(michiel): Indicates changes have been made
+    switch (expr->kind)
+    {
+        case Expr_Paren:
+        {
+            if (expr->paren.expr->kind == Expr_Paren)
+            {
+                Expr *parenExpr = expr->paren.expr;
+                expr->paren.expr = parenExpr->paren.expr;
+                free_expr(optimizer, parenExpr);
+                result = true;
+            }
+            result |= collapse_parenthesis(optimizer, expr->paren.expr);
+        } break;
+        
+        case Expr_Int:
+        case Expr_Id:
+        {
+            // NOTE(michiel): Do nothing
+        } break;
+        
+        case Expr_Unary:
+        {
+            result = collapse_parenthesis(optimizer, expr->unary.expr);
+        } break;
+        
+        case Expr_Binary:
+        {
+            Expr *left = expr->binary.left;
+            Expr *right = expr->binary.right;
+            OpPrecedence opP = get_op_precedence(expr->binary.op);
+                if ((left->kind == Expr_Paren) &&
+                (left->paren.expr->kind == Expr_Binary))
+            {
+                OpPrecedence leftOpP = get_op_precedence(left->paren.expr->binary.op);
+                if ((opP.level < leftOpP.level) ||
+                    ((opP.level == leftOpP.level) && 
+                     (opP.commutative ||
+                     ((opP.associate == Associate_LeftToRight) &&
+                       (leftOpP.associate == Associate_LeftToRight)))))
+                {
+                    expr->binary.left = left->paren.expr;
+                    free_expr(optimizer, left);
+                result = true;
+            }
+                }
+            if ((right->kind == Expr_Paren) &&
+                (right->paren.expr->kind == Expr_Binary))
+            {
+                OpPrecedence rightOpP = get_op_precedence(right->paren.expr->binary.op);
+                if ((opP.level < rightOpP.level) ||
+                    ((opP.level == rightOpP.level) &&
+                     (opP.commutative ||
+                     ((opP.associate == Associate_RightToLeft) &&
+                       (rightOpP.associate == Associate_RightToLeft)))))
+                {
+                    expr->binary.right = right->paren.expr;
+                    free_expr(optimizer, right);
+                result = true;
+            }
+                }
+            
+            result |= collapse_parenthesis(optimizer, expr->binary.left);
+            result |= collapse_parenthesis(optimizer, expr->binary.right);
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return result;
+}
+
+global Map gConstSymbols_;
+global Map *gConstSymbols = &gConstSymbols_;
+
+internal s64
+execute_op(TokenKind op, s64 left, s64 right)
+{
+    s64 val = 0;
+    switch ((u32)op)
+    {
+        case TOKEN_POW: { val = (s64)(pow((f64)left, (f64)right)); } break;
+        case '*': { val = left * right; } break;
+        case '/': { i_expect(right); val = left / right; } break;
+        case TOKEN_SLL: { val = left << right; } break;
+        case TOKEN_SRA: { val = (s64)((s64)left >> (s64)right); } break;
+        case TOKEN_SRL: { val = (s64)((u64)left >> (u64)right); } break;
+        case '+': { val = left + right; } break;
+        case '-': { val = left - right; } break;
+        case '&': { val = left & right; } break;
+        case '^': { val = left ^ right; } break;
+        case '|': { val = left | right; } break;
+        INVALID_DEFAULT_CASE;
+    }
+    return val;
+}
+
+internal void
+combine_const(AstOptimizer *optimizer, Expr *expr)
+{
+    switch (expr->kind)
+    {
+        case Expr_Paren:
+        {
+            combine_const(optimizer, expr->paren.expr);
+            if (expr->paren.expr->kind == Expr_Int)
+            {
+                Expr *parenExpr = expr->paren.expr;
+                s64 val = parenExpr->intConst;
+                expr->kind = Expr_Int;
+                expr->intConst = val;
+                free_expr(optimizer, parenExpr);
+            }
+        } break;
+        
+        case Expr_Int:
+        {
+            // NOTE(michiel): Do nothing
+        } break;
+        
+        case Expr_Id:
+        {
+            // NOTE(michiel): If last time it was assigned a constant value
+            Expr *constant = map_get(gConstSymbols, expr->name.data);
+            if (constant)
+            {
+                expr->kind = Expr_Int;
+                expr->intConst = constant->intConst;
+            }
+        } break;
+        
+        case Expr_Unary:
+        {
+            combine_const(optimizer, expr->unary.expr);
+            Expr *unaryExpr = expr->unary.expr;
+            if (unaryExpr->kind == Expr_Int)
+            {
+                s64 val = unaryExpr->intConst;
+                switch ((u32)expr->unary.op)
+                {
+                    case '+': { } break;
+                    case '-': { val = -val; } break;
+                    case '~': { val = ~val; } break;
+                    case '!': { val = !val; } break;
+                    case TOKEN_INC: { val = val + 1; } break;
+                    case TOKEN_DEC: { val = val - 1; } break;
+                    INVALID_DEFAULT_CASE;
+                }
+                expr->kind = Expr_Int;
+                expr->intConst = val;
+                free_expr(optimizer, unaryExpr);
+            }
+        } break;
+        
+        case Expr_Binary:
+{
+            #if 0
+        // NOTE(michiel): Swap IO to be as far left as possible for constant optimizations
+            if ((expr->binary.right->kind == Expr_Id) &&
+                strings_are_equal(expr->binary.right->name, create_string("IO")) &&
+                get_op_precedence(expr->binary.op).commutative)
+            {
+                Expr *temp = expr->binary.right;
+                expr->binary.right = expr->binary.left;
+                expr->binary.left = temp;
+            }
+            #endif
+
+            combine_const(optimizer, expr->binary.left);
+            combine_const(optimizer, expr->binary.right);
+            if ((expr->binary.left->kind == Expr_Int) &&
+                (expr->binary.right->kind == Expr_Int))
+            {
+                s64 left = expr->binary.left->intConst;
+                s64 right = expr->binary.right->intConst;
+                s64 val = execute_op(expr->binary.op, left, right);
+                
+                free_expr(optimizer, expr->binary.left);
+                free_expr(optimizer, expr->binary.right);
+                expr->kind = Expr_Int;
+                expr->intConst = val;
+            }
+            else if (expr->binary.left->kind == Expr_Int)
+            {
+                Expr *right = expr->binary.right;
+                
+                TokenKind op = expr->binary.op;
+                OpPrecedence opP = get_op_precedence(op);
+                
+                if (right->kind == Expr_Binary)
+                    {
+                    TokenKind rightOp = right->binary.op;
+                    OpPrecedence rightOpP = get_op_precedence(rightOp);
+                    
+                    if ((right->binary.left->kind == Expr_Int) ||
+                     (rightOpP.commutative && 
+                      (right->binary.right->kind == Expr_Int) &&
+                      (right->binary.left->kind == Expr_Id) &&
+                      strings_are_equal(right->binary.left->name, create_string("IO"))))
+                {
+                    if (right->binary.left->kind == Expr_Id)
+                        {
+                            // NOTE(michiel): Swap IO so we can optimize further
+                        i_expect(rightOpP.commutative);
+                        Expr *temp = right->binary.left;
+                        right->binary.left = right->binary.right;
+                        right->binary.right = temp;
+                    }
+                    
+                    s64 leftVal = expr->binary.left->intConst;;
+                    s64 rightVal = right->binary.left->intConst;
+                    s64 val = 0;
+                    b32 update = false;
+                    
+                    // NOTE(michiel): If the right operator is of lesser precedence than the
+                    // current or they are the same and commutative or they are the same and
+                    // it is left associative.
+                    // TODO(michiel): Right associativity handling
+                    b32 execute = ((rightOpP.level < opP.level) ||
+                                   ((opP.op == rightOpP.op) && 
+                                    (opP.commutative || 
+                                     (opP.associate == Associate_LeftToRight))));
+                    
+                    if (execute)
+                    {
+                        val = execute_op(op, leftVal, rightVal);
+                        update = true;
+                    }
+                    else if (((op == '+') || (op == '-')) && 
+                             ((rightOp == '+') || (rightOp == '-')))
+                    {
+                        // NOTE(michiel): If we got X - 2 + 3 we can combine it to X + 1
+                        // X - 2 + 3 => X + (-2 + 3) => X + (3 - 2) => X - -(3 - 2)
+                        // X - (2 - 3) => X - -1
+                        
+                        if (((rightOp == '+') && (op == '-')) ||
+                            ((rightOp == '-') && (op == '+')))
+                        {
+                            val = leftVal - rightVal;
+                            update = true;
+                        }
+                        else if ((rightOp == '-') && (op == '-'))
+                        {
+                            val = leftVal + rightVal;
+                            update = true;
+                        }
+                        
+                        if (update && (val < 0))
+                        {
+                            // NOTE(michiel): Switch op and negate
+                            op = (op == '+') ? '-' : '+';
+                            val = -val;
+                        }
+                    }
+                    
+                    if (update)
+                    {
+                        expr->binary.op = op;
+                        expr->binary.left->intConst = val;
+                        expr->binary.right = right->binary.right;
+                        free_expr(optimizer, right->binary.left);
+                        free_expr(optimizer, right);
+                    }
+                }
+}
+            } 
+            else if (expr->binary.right->kind == Expr_Int)
+            {
+                Expr *left = expr->binary.left;
+                
+                TokenKind op = expr->binary.op;
+                OpPrecedence opP = get_op_precedence(op);
+                
+    if (left->kind == Expr_Binary)
+    {
+    TokenKind leftOp = left->binary.op;
+                OpPrecedence leftOpP = get_op_precedence(leftOp);
+
+                if ((left->binary.right->kind == Expr_Int) ||
+                     (leftOpP.commutative && 
+                      (left->binary.left->kind == Expr_Int) &&
+                      (left->binary.right->kind == Expr_Id) &&
+                      strings_are_equal(left->binary.right->name, create_string("IO"))))
+                {
+                    if (left->binary.right->kind == Expr_Id)
+                    {
+                        i_expect(leftOpP.commutative);
+                        Expr *temp = left->binary.left;
+                        left->binary.left = left->binary.right;
+                        left->binary.right = temp;
+                    }
+    
+                    s64 leftVal = left->binary.right->intConst;
+                    s64 rightVal = expr->binary.right->intConst;
+                    s64 val = 0;
+                    b32 update = false;
+                    
+                    // NOTE(michiel): If the left operator is of lesser precedence than the
+                    // current or they are the same and commutative or they are the same and
+                    // it is right associative.
+                    // TODO(michiel): Right associativity handling
+                    b32 execute = ((leftOpP.level < opP.level) ||
+                                   ((opP.op == leftOpP.op) && 
+                                    (opP.commutative || 
+                                     (opP.associate == Associate_RightToLeft))));
+                    
+                    if (execute)
+                    {
+                        val = execute_op(op, leftVal, rightVal);
+                        update = true;
+                    }
+                    else if (((op == '+') || (op == '-')) && 
+                             ((leftOp == '+') || (leftOp == '-')))
+                    {
+                        // NOTE(michiel): If we got X - 2 + 3 we can combine it to X + 1
+                        // X - 2 + 3 => X + (-2 + 3) => X + (3 - 2) => X - -(3 - 2)
+                        // X - (2 - 3) => X - -1
+                        
+                        if (((op == '+') && (leftOp == '-')) ||
+                            ((op == '-') && (leftOp == '+')))
+                        {
+                            val = leftVal - rightVal;
+                            update = true;
+                        }
+                        else if ((op == '-') && (leftOp == '-'))
+                        {
+                            val = leftVal + rightVal;
+                            update = true;
+                        }
+                        
+                        if (update && (val < 0))
+                        {
+                            // NOTE(michiel): Switch op and negate
+                            leftOp = (leftOp == '+') ? '-' : '+';
+                            val = -val;
+                        }
+                    }
+                    
+                    if (update)
+                    {
+                        expr->binary.op = leftOp;
+                        expr->binary.left = left->binary.left;
+                        expr->binary.right->intConst = val;
+                        free_expr(optimizer, left->binary.right);
+                        free_expr(optimizer, left);
+                    }
+                }
+            }
+}
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    if (collapse_parenthesis(optimizer, expr))
+    {
+        combine_const(optimizer, expr);
+    }
+}
+
 internal void
 ast_optimize(AstOptimizer *optimizer)
 {
@@ -758,9 +940,19 @@ ast_optimize(AstOptimizer *optimizer)
         Stmt *stmt = optimizer->statements.stmts[stmtIdx];
         if (stmt->kind == Stmt_Assign)
         {
+            collapse_parenthesis(optimizer, stmt->assign.left);
+            collapse_parenthesis(optimizer, stmt->assign.right);
+            
             i_expect(stmt->assign.left->kind == Expr_Id);
             insert_var_names(optimizer, stmt->assign.left, true);
             insert_var_names(optimizer, stmt->assign.right, false);
+             while (stmt->assign.right->kind == Expr_Paren)
+            {
+                // NOTE(michiel): Remove extra parenthesized assignments
+                Expr *removal = stmt->assign.right;
+                stmt->assign.right = stmt->assign.right->paren.expr;
+                free_expr(optimizer, removal);
+            }
             }
         else
         {

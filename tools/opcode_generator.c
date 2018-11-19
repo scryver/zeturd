@@ -744,7 +744,7 @@ int main(int argc, char **argv)
             AstOptimizer astOptimizer = {0};
             astOptimizer.statements = *stmts;
             ast_optimize(&astOptimizer);
-            graph_ast(stmts, "ast.dot");
+            graph_ast(&astOptimizer.statements, "ast.dot");
             //print_ast((FileStream){.file=stdout}, stmts);
             generate_ir(&astOptimizer, (FileStream){.file=stdout});
             //generate_ir_file(&astOptimizer, "henkie.tst");

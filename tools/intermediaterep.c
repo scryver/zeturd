@@ -70,15 +70,8 @@ generate_ir_expr(AstOptimizer *optimizer, Expr *expr, FileStream output,
     {
         case Expr_Paren:
         {
-             String paren = generate_ir_expr(optimizer, expr->paren.expr, output, parent);
-            if (is_flat_expr(expr->paren.expr))
-            {
-            result = create_string_fmt("(%.*s)", paren.size, paren.data);
-            }
-            else
-            {
-                result = paren;
-            }
+             String paren = generate_ir_expr(optimizer, expr->paren.expr, output, expr);
+            result = paren; // create_string_fmt("(%.*s)", paren.size, paren.data);
         } break;
         
         case Expr_Int:
