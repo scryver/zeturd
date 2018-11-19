@@ -12,6 +12,8 @@ typedef enum TokenKind
     TOKEN_ADDR = '@',
     TOKEN_DEREF = '$',
     
+    TOKEN_ASSIGN = '=',
+    
     TOKEN_NUMBER = 128,
     TOKEN_ID,
     TOKEN_INC,

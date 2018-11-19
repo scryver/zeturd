@@ -7,6 +7,7 @@
 #include "./tokenizer.c"
 #include "./ast.c"
 #include "./parser.c"
+#include "./intermediaterep.c"
 
 #define REG_MAX (1 << 9)
 
@@ -745,6 +746,7 @@ int main(int argc, char **argv)
             ast_optimize(&astOptimizer);
             graph_ast(stmts, "ast.dot");
             print_ast((FileStream){.file=stdout}, stmts);
+            generate_ir_file(&astOptimizer, "henkie.tst");
             
             u32 trimmed = 0;
             for (Expr *fre = astOptimizer.exprFreeList;

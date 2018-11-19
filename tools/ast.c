@@ -442,9 +442,6 @@ print_ast(FileStream output, StmtList *statements)
     }
 }
 
-global Map gAstSymbols_;
-global Map *gAstSymbols = &gAstSymbols_;
-
 internal void
 free_expr(AstOptimizer *optimizer, Expr *expr)
 {
@@ -452,6 +449,9 @@ free_expr(AstOptimizer *optimizer, Expr *expr)
     expr->nextFree = optimizer->exprFreeList;
     optimizer->exprFreeList = expr;
 }
+
+global Map gConstSymbols_;
+global Map *gConstSymbols = &gConstSymbols_;
 
 internal s64
 execute_op(TokenKind op, s64 left, s64 right)
@@ -502,7 +502,13 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
         
         case Expr_Id:
         {
-            // NOTE(michiel): Do nothing
+            // NOTE(michiel): If last time it was assigned a constant value
+            Expr *constant = map_get(gConstSymbols, expr->name.data);
+            if (constant)
+            {
+                expr->kind = Expr_Int;
+                expr->intConst = constant->intConst;
+            }
         } break;
         
         case Expr_Unary:
@@ -618,15 +624,76 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
     }
 }
 
+global Map gAstSymbols_;
+global Map *gAstSymbols = &gAstSymbols_;
+
+global String gKeyWordNames[] = 
+{
+    {6, (u8 *)"SYNCED"},
+    {2, (u8 *)"IO"},
+};
+
+internal b32
+is_key_word(String var)
+{
+    b32 result = false;
+    
+    for (u32 keyIdx = 0; keyIdx < array_count(gKeyWordNames); ++keyIdx)
+    {
+        if (strings_are_equal(var, gKeyWordNames[keyIdx]))
+        {
+            result = true;
+            break;
+        }
+    }
+    
+    return result;
+}
+
+internal inline String
+get_assign_name(String var)
+{
+    String result = var;
+    if (!is_key_word(var))
+    {
+        u64 id = map_get_u64(gAstSymbols, var.data);
+        ++id;
+        map_put_u64(gAstSymbols, var.data, id);
+        result = create_string_fmt("%.*s%d", var.size, var.data, id);
+    }
+    return result;
+}
+
+internal inline String
+get_var_name(String var)
+{
+    String result = var;
+    if (!is_key_word(var))
+    {
+        u64 id = map_get_u64(gAstSymbols, var.data);
+        if (id)
+        {
+            result = create_string_fmt("%.*s%d", var.size, var.data, id);
+        }
+        else
+        {
+            fprintf(stderr, "Variable %.*s has not been assigned yet!\n",
+                    var.size, var.data);
+            INVALID_CODE_PATH;
+        }
+    }
+    return result;
+}
+
 internal void
-insert_var_expr(AstOptimizer *optimizer, Expr *expr)
+insert_var_names(AstOptimizer *optimizer, Expr *expr, b32 isAssign)
 {
     switch (expr->kind)
     {
         
         case Expr_Paren:
         {
-            insert_var_expr(optimizer, expr->paren.expr);
+            insert_var_names(optimizer, expr->paren.expr, isAssign);
         } break;
         
         case Expr_Int:
@@ -636,26 +703,27 @@ insert_var_expr(AstOptimizer *optimizer, Expr *expr)
         
         case Expr_Id:
         {
-            if (!strings_are_equal(expr->name, create_string("IO")))
+            String varName;
+            if (isAssign)
             {
-                Expr *varExpr = map_get(gAstSymbols, expr->name.data);
-                if (varExpr)
-                {
-                    expr->kind = Expr_Paren;
-                    expr->paren.expr = varExpr;
+                varName = get_assign_name(expr->name);
                 }
+            else
+            {
+             varName = get_var_name(expr->name);
             }
+            expr->name = varName;
         } break;
         
         case Expr_Unary:
         {
-            insert_var_expr(optimizer, expr->unary.expr);
+            insert_var_names(optimizer, expr->unary.expr, isAssign);
         } break;
         
         case Expr_Binary:
         {
-            insert_var_expr(optimizer, expr->binary.left);
-            insert_var_expr(optimizer, expr->binary.right);
+            insert_var_names(optimizer, expr->binary.left, isAssign);
+            insert_var_names(optimizer, expr->binary.right, isAssign);
         } break;
         
         INVALID_DEFAULT_CASE;
@@ -665,22 +733,20 @@ insert_var_expr(AstOptimizer *optimizer, Expr *expr)
 internal void
 ast_optimize(AstOptimizer *optimizer)
 {
-
-#if 0    
     for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
     {
         Stmt *stmt = optimizer->statements.stmts[stmtIdx];
         if (stmt->kind == Stmt_Assign)
         {
             i_expect(stmt->assign.left->kind == Expr_Id);
-            if (!strings_are_equal(stmt->assign.left->name, create_string("IO")))
-            {
-                map_put(gAstSymbols, stmt->assign.left->name.data, stmt->assign.right);
+            insert_var_names(optimizer, stmt->assign.left, true);
+            insert_var_names(optimizer, stmt->assign.right, false);
             }
-            insert_var_expr(optimizer, stmt->assign.right);
-            }
+        else
+        {
+            i_expect(stmt->kind == Stmt_Hint);
+        }
     }
-    #endif
 
     for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
     {
@@ -689,6 +755,12 @@ ast_optimize(AstOptimizer *optimizer)
         {
             combine_const(optimizer, stmt->assign.left);
             combine_const(optimizer, stmt->assign.right);
+            if (stmt->assign.right->kind == Expr_Int)
+            {
+                i_expect(stmt->assign.left->kind == Expr_Id);
+                map_put(gConstSymbols, stmt->assign.left->name.data,
+                        stmt->assign.right);
+            }
             }
         else
         {
