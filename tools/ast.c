@@ -35,50 +35,51 @@ ast_alloc_expr(AstOptimizer *optimizer)
 // NOTE(michiel): Init functions
 //
 internal Expr *
-create_expr(ExprKind kind)
+create_expr(SourcePos origin, ExprKind kind)
 {
     Expr *result = ast_alloc_expr(0);
+    result->origin = origin;
     result->kind = kind;
     return result;
 }
 
 internal Expr *
-create_paren_expr(Expr *expr)
+create_paren_expr(SourcePos origin, Expr *expr)
 {
-    Expr *result = create_expr(Expr_Paren);
+    Expr *result = create_expr(origin, Expr_Paren);
     result->paren.expr = expr;
     return result;
 }
 
 internal Expr *
-create_int_expr(s64 value)
+create_int_expr(SourcePos origin, s64 value)
 {
-    Expr *result = create_expr(Expr_Int);
+    Expr *result = create_expr(origin, Expr_Int);
     result->intConst = value;
     return result;
 }
 
 internal Expr *
-create_id_expr(String id)
+create_id_expr(SourcePos origin, String id)
 {
-    Expr *result = create_expr(Expr_Id);
+    Expr *result = create_expr(origin, Expr_Id);
     result->name = str_internalize(id);
     return result;
 }
 
 internal Expr *
-create_unary_expr(TokenKind op, Expr *expr)
+create_unary_expr(SourcePos origin, TokenKind op, Expr *expr)
 {
-    Expr *result = create_expr(Expr_Unary);
+    Expr *result = create_expr(origin, Expr_Unary);
     result->unary.op = op;
     result->unary.expr = expr;
     return result;
 }
 
 internal Expr *
-create_binary_expr(TokenKind op, Expr *left, Expr *right)
+create_binary_expr(SourcePos origin, TokenKind op, Expr *left, Expr *right)
 {
-    Expr *result = create_expr(Expr_Binary);
+    Expr *result = create_expr(origin, Expr_Binary);
     result->binary.op = op;
     result->binary.left = left;
     result->binary.right = right;
@@ -86,17 +87,18 @@ create_binary_expr(TokenKind op, Expr *left, Expr *right)
 }
 
 internal Stmt *
-create_stmt(StmtKind kind)
+create_stmt(SourcePos origin, StmtKind kind)
 {
     Stmt *result = ast_alloc_struct(Stmt);
+    result->origin = origin;
     result->kind = kind;
     return result;
 }
 
 internal Stmt *
-create_assign_stmt(TokenKind op, Expr *left, Expr *right)
+create_assign_stmt(SourcePos origin, TokenKind op, Expr *left, Expr *right)
 {
-    Stmt *result = create_stmt(Stmt_Assign);
+    Stmt *result = create_stmt(origin, Stmt_Assign);
     result->assign.op = op;
     result->assign.left = left;
     result->assign.right = right;
@@ -104,9 +106,9 @@ create_assign_stmt(TokenKind op, Expr *left, Expr *right)
 }
 
 internal Stmt *
-create_hint_stmt(Expr *expr)
+create_hint_stmt(SourcePos origin, Expr *expr)
 {
-    Stmt *result = create_stmt(Stmt_Hint);
+    Stmt *result = create_stmt(origin, Stmt_Hint);
     result->expr = expr;
     return result;
 }
@@ -166,24 +168,25 @@ internal Expr *
 ast_expression_operand(AstParser *parser)
 {
     Expr *result = 0;
+    SourcePos origin = parser->current->origin;
     if (is_token(parser, TOKEN_NUMBER))
     {
         u64 val = string_to_number(parser->current->value);
         ast_next_token(parser);
-        result = create_int_expr(val);
+        result = create_int_expr(origin, val);
     }
     else if (is_token(parser, TOKEN_ID))
     {
         String name = parser->current->value;
         ast_next_token(parser);
-        result = create_id_expr(name);
+        result = create_id_expr(origin, name);
     }
     else if (is_token(parser, '('))
     {
         expect_token(parser, '(');
         Expr *expr = ast_expression(parser);
         expect_token(parser, ')');
-        result = create_paren_expr(expr);
+        result = create_paren_expr(origin, expr);
     }
     else
     {
@@ -219,9 +222,10 @@ ast_expression_unary(AstParser *parser)
     Expr *result = 0;
     if (is_unary_op(parser))
     {
+        SourcePos origin = parser->current->origin;
         TokenKind op = parser->current->kind;
         ast_next_token(parser);
-        result = create_unary_expr(op, ast_expression_unary(parser));
+        result = create_unary_expr(origin, op, ast_expression_unary(parser));
     }
     else
     {
@@ -282,16 +286,17 @@ ast_expression_operator(AstParser *parser, u32 precedenceLevel)
     while ((opP.associate != Associate_None) &&
            (opP.level >= precedenceLevel))
         {
+        SourcePos origin = parser->current->origin;
             ast_next_token(parser);
             if (opP.associate == Associate_LeftToRight)
         {
-            expr = create_binary_expr(opP.op, expr,
+            expr = create_binary_expr(origin, opP.op, expr,
                                       ast_expression_operator(parser, opP.level + 1));
             }
             else
             {
                 i_expect(opP.associate == Associate_RightToLeft);
-            expr = create_binary_expr(opP.op, expr, 
+            expr = create_binary_expr(origin, opP.op, expr, 
                                       ast_expression_operator(parser, opP.level));
             }
         
@@ -310,17 +315,18 @@ ast_expression(AstParser *parser)
 internal Stmt *
 ast_statement(AstParser *parser)
 {
+    SourcePos origin = parser->current->origin;
     Expr *expr = ast_expression(parser);
     Stmt *result = 0;
     if (is_token(parser, '='))
     {
         TokenKind op = parser->current->kind;
         ast_next_token(parser);
-        result = create_assign_stmt(op, expr, ast_expression(parser));
+        result = create_assign_stmt(origin, op, expr, ast_expression(parser));
     }
     else
     {
-        result = create_hint_stmt(expr);
+        result = create_hint_stmt(origin, expr);
     }
     
     return result;
@@ -478,12 +484,19 @@ execute_op(TokenKind op, s64 left, s64 right)
 internal void
 combine_const(AstOptimizer *optimizer, Expr *expr)
 {
-    // NOTE(michiel): This __DOESN'T__ free the expression that have been combined
-    // TODO(michiel): Maybe freelist them?
+    // NOTE(michiel): Doubles as remover of extra parenthesis
+    
     switch (expr->kind)
     {
         case Expr_Paren:
         {
+            if (expr->paren.expr->kind == Expr_Paren)
+            {
+                Expr *parenExpr = expr->paren.expr;
+                expr->paren.expr = parenExpr->paren.expr;
+                free_expr(optimizer, parenExpr);
+            }
+            
             combine_const(optimizer, expr->paren.expr);
             if (expr->paren.expr->kind == Expr_Int)
             {
@@ -651,8 +664,10 @@ is_key_word(String var)
 }
 
 internal inline String
-get_assign_name(String var)
+get_assign_name(Expr *expr)
 {
+    i_expect(expr->kind == Expr_Id);
+    String var = expr->name;
     String result = var;
     if (!is_key_word(var))
     {
@@ -665,8 +680,10 @@ get_assign_name(String var)
 }
 
 internal inline String
-get_var_name(String var)
+get_var_name(Expr *expr)
 {
+    i_expect(expr->kind == Expr_Id);
+    String var = expr->name;
     String result = var;
     if (!is_key_word(var))
     {
@@ -677,7 +694,9 @@ get_var_name(String var)
         }
         else
         {
-            fprintf(stderr, "Variable %.*s has not been assigned yet!\n",
+            fprintf(stderr, "%.*s:%d:%d: Variable %.*s has not been assigned yet!\n",
+                    expr->origin.filename.size, expr->origin.filename.data,
+                    expr->origin.lineNumber, expr->origin.colNumber, 
                     var.size, var.data);
             INVALID_CODE_PATH;
         }
@@ -706,11 +725,11 @@ insert_var_names(AstOptimizer *optimizer, Expr *expr, b32 isAssign)
             String varName;
             if (isAssign)
             {
-                varName = get_assign_name(expr->name);
+                varName = get_assign_name(expr);
                 }
             else
             {
-             varName = get_var_name(expr->name);
+             varName = get_var_name(expr);
             }
             expr->name = varName;
         } break;
@@ -733,6 +752,7 @@ insert_var_names(AstOptimizer *optimizer, Expr *expr, b32 isAssign)
 internal void
 ast_optimize(AstOptimizer *optimizer)
 {
+    // NOTE(michiel): Insert unique variable names
     for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
     {
         Stmt *stmt = optimizer->statements.stmts[stmtIdx];
@@ -747,8 +767,9 @@ ast_optimize(AstOptimizer *optimizer)
             i_expect(stmt->kind == Stmt_Hint);
         }
     }
-
-    for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
+    
+    // NOTE(michiel): Combine constants and record assignments of constants
+    for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount;)
     {
         Stmt *stmt = optimizer->statements.stmts[stmtIdx];
         if (stmt->kind == Stmt_Assign)
@@ -758,13 +779,32 @@ ast_optimize(AstOptimizer *optimizer)
             if (stmt->assign.right->kind == Expr_Int)
             {
                 i_expect(stmt->assign.left->kind == Expr_Id);
+                if (!is_key_word(stmt->assign.left->name))
+                {
                 map_put(gConstSymbols, stmt->assign.left->name.data,
                         stmt->assign.right);
+                    for (s32 moveIdx = stmtIdx;
+                         moveIdx < (optimizer->statements.stmtCount - 1);
+                         ++moveIdx)
+                    {
+                        optimizer->statements.stmts[moveIdx] = optimizer->statements.stmts[moveIdx + 1];
+                    }
+                    --optimizer->statements.stmtCount;
+                }
+                else
+                {
+                    ++stmtIdx;
+                }
+            }
+            else
+            {
+                ++stmtIdx;
             }
             }
         else
         {
             combine_const(optimizer, stmt->expr);
+            ++stmtIdx;
         }
     }
 }

@@ -13,6 +13,8 @@ typedef enum ExprKind
 
 struct Expr
 {
+    SourcePos origin;
+    
     ExprKind kind;
     
     union {
@@ -46,6 +48,7 @@ typedef enum StmtKind
 
 struct Stmt
 {
+    SourcePos origin;
     StmtKind kind;
     
     union

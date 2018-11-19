@@ -125,9 +125,7 @@ graph_token_expr3(TokenGraph *graph, Token **token, String connection)
                     minus.size, minus.data);
         }
         *token = (*token)->nextToken;
-        result = graph_token_expr4(graph, token, minus);
-        fprintf(graph->output.file, "  %.*s -> %.*s;\n", minus.size, minus.data, 
-                result.size, result.data);
+        graph_token_expr4(graph, token, minus);
         result = minus;
     }
     else

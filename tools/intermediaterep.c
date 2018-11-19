@@ -42,6 +42,25 @@ get_binary_name(TokenKind op)
 
 global u64 gTempCount = 0;
 
+internal inline String
+get_temporary_name(void)
+{
+    String result = create_string_fmt("turd%d", ++gTempCount);
+    return result;
+}
+
+internal inline b32
+is_flat_expr(Expr *expr)
+{
+    b32 result = false;
+    if ((expr->kind == Expr_Id) ||
+        (expr->kind == Expr_Int))
+    {
+        result = true;
+    }
+    return result;
+}
+
 internal String
 generate_ir_expr(AstOptimizer *optimizer, Expr *expr, FileStream output, 
                  Expr *parent)
@@ -51,8 +70,15 @@ generate_ir_expr(AstOptimizer *optimizer, Expr *expr, FileStream output,
     {
         case Expr_Paren:
         {
-             String paren = generate_ir_expr(optimizer, expr->paren.expr, output, expr);
+             String paren = generate_ir_expr(optimizer, expr->paren.expr, output, parent);
+            if (is_flat_expr(expr->paren.expr))
+            {
             result = create_string_fmt("(%.*s)", paren.size, paren.data);
+            }
+            else
+            {
+                result = paren;
+            }
         } break;
         
         case Expr_Int:
@@ -72,7 +98,7 @@ generate_ir_expr(AstOptimizer *optimizer, Expr *expr, FileStream output,
             
             if (parent)
             {
-                String temp = create_string_fmt("t%d", ++gTempCount);
+                String temp = get_temporary_name();
                 String assignOp = get_binary_name(TOKEN_ASSIGN);
                 fprintf(output.file, "%.*s %.*s %.*s %.*s\n", temp.size, temp.data,
                         assignOp.size, assignOp.data, opStr.size, opStr.data, 
@@ -94,7 +120,7 @@ generate_ir_expr(AstOptimizer *optimizer, Expr *expr, FileStream output,
             
             if (parent)
             {
-                String temp = create_string_fmt("t%d", ++gTempCount);
+                String temp = get_temporary_name();
                 String assignOp = get_binary_name(TOKEN_ASSIGN);
                 fprintf(output.file, "%.*s %.*s %.*s %.*s %.*s\n", temp.size, temp.data,
                         assignOp.size, assignOp.data, left.size, left.data,

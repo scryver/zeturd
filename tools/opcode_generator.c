@@ -745,8 +745,9 @@ int main(int argc, char **argv)
             astOptimizer.statements = *stmts;
             ast_optimize(&astOptimizer);
             graph_ast(stmts, "ast.dot");
-            print_ast((FileStream){.file=stdout}, stmts);
-            generate_ir_file(&astOptimizer, "henkie.tst");
+            //print_ast((FileStream){.file=stdout}, stmts);
+            generate_ir(&astOptimizer, (FileStream){.file=stdout});
+            //generate_ir_file(&astOptimizer, "henkie.tst");
             
             u32 trimmed = 0;
             for (Expr *fre = astOptimizer.exprFreeList;

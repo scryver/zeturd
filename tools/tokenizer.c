@@ -9,7 +9,7 @@ advance(TokenEater *eater)
     token = next_token(result, tokenIndex++); \
     token->kind = t1; \
     token->value = str_internalize((String){.size=1, .data= (u8 *)eater.scanner}); \
-    token->colNumber = eater.columnNumber; \
+    token->origin.colNumber = eater.columnNumber; \
     advance(&eater); \
 } break
 
@@ -17,7 +17,7 @@ advance(TokenEater *eater)
     token = next_token(result, tokenIndex++); \
     String value = { .size = 1, .data = (u8 *)eater.scanner }; \
     token->kind = t1; \
-    token->colNumber = eater.columnNumber; \
+    token->origin.colNumber = eater.columnNumber; \
     advance(&eater); \
     if (eater.scanner[0] && (eater.scanner[0] == t2)) \
     { \
@@ -32,7 +32,7 @@ advance(TokenEater *eater)
     token = next_token(result, tokenIndex++); \
     String value = { .size = 1, .data = (u8 *)eater.scanner }; \
     token->kind = t1; \
-    token->colNumber = eater.columnNumber; \
+    token->origin.colNumber = eater.columnNumber; \
     advance(&eater); \
     if (eater.scanner[0] && (eater.scanner[0] == t2)) \
     { \
@@ -110,7 +110,7 @@ tokenize(Buffer buffer, String filename)
                 .size = 1,
                 .data = (u8 *)eater.scanner,
             };
-            token->colNumber = eater.columnNumber;
+                token->origin.colNumber = eater.columnNumber;
             if ((eater.scanner[0] == '0') &&
                 ((eater.scanner[1] == 'x') ||
                  (eater.scanner[1] == 'X') ||
@@ -190,7 +190,7 @@ tokenize(Buffer buffer, String filename)
                 .size = 1,
                 .data = (u8 *)eater.scanner,
             };
-            token->colNumber = eater.columnNumber;
+                token->origin.colNumber = eater.columnNumber;
             advance(&eater);
             while ((eater.scanner[0] == '_') ||
                    (('A' <= eater.scanner[0]) && (eater.scanner[0] <= 'Z')) ||
@@ -212,8 +212,8 @@ tokenize(Buffer buffer, String filename)
         
         if (token)
         {
-            token->lineNumber = eater.lineNumber;
-            token->filename = filename;
+            token->origin.lineNumber = eater.lineNumber;
+            token->origin.filename = filename;
             if (token->kind == '\n')
             {
                 ++eater.lineNumber;
@@ -235,9 +235,9 @@ tokenize(Buffer buffer, String filename)
         Token *token = next_token(result, tokenIndex++);
         token->kind = TOKEN_EOF;
         token->value = str_internalize_cstring("");
-        token->colNumber = 0;
-        token->lineNumber = eater.lineNumber;
-        token->filename = filename;
+        token->origin.colNumber = 0;
+        token->origin.lineNumber = eater.lineNumber;
+        token->origin.filename = filename;
         prevToken->nextToken = token;
     }
 
@@ -310,8 +310,8 @@ CASE(SRL);
 internal void
 print_token(FileStream fileStream, Token *token)
 {
-    fprintf(fileStream.file, "%.*s:%d:%d < ", token->filename.size, token->filename.data,
-            token->lineNumber, token->colNumber);
+    fprintf(fileStream.file, "%.*s:%d:%d < ", token->origin.filename.size,
+            token->origin.filename.data, token->origin.lineNumber, token->origin.colNumber);
     print_token_kind(fileStream, token->kind);
     if (token->kind == '\n')
     {

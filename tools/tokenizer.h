@@ -1,3 +1,10 @@
+typedef struct SourcePos
+{
+    u32 colNumber;
+    u32 lineNumber;
+    String filename;
+} SourcePos;
+
 typedef enum TokenKind
 {
     TOKEN_NULL,
@@ -36,10 +43,8 @@ typedef struct Token
     TokenKind kind;
     String    value;
 
-    u32 colNumber;
-    u32 lineNumber;
-    String filename;
-
+    SourcePos origin;
+    
     struct Token *nextToken;
 } Token;
 
