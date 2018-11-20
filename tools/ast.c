@@ -534,6 +534,9 @@ free_stmt(AstOptimizer *optimizer, Stmt *stmt)
 global Map gAstSymbols_;
 global Map *gAstSymbols = &gAstSymbols_;
 
+global Map gAstSymbolExpr_;
+global Map *gAstSymbolExpr = &gAstSymbolExpr_;
+
 global String gKeyWordNames[] = 
 {
     {6, (u8 *)"SYNCED"},
@@ -599,14 +602,14 @@ get_var_name(Expr *expr)
 }
 
 internal void
-insert_var_names(AstOptimizer *optimizer, Expr *expr, b32 isAssign)
+assign_var_names(AstOptimizer *optimizer, Expr *expr, b32 isAssign)
 {
     switch (expr->kind)
     {
         
         case Expr_Paren:
         {
-            insert_var_names(optimizer, expr->paren.expr, isAssign);
+            assign_var_names(optimizer, expr->paren.expr, isAssign);
         } break;
         
         case Expr_Int:
@@ -630,13 +633,13 @@ insert_var_names(AstOptimizer *optimizer, Expr *expr, b32 isAssign)
         
         case Expr_Unary:
         {
-            insert_var_names(optimizer, expr->unary.expr, isAssign);
+            assign_var_names(optimizer, expr->unary.expr, isAssign);
         } break;
         
         case Expr_Binary:
         {
-            insert_var_names(optimizer, expr->binary.left, isAssign);
-            insert_var_names(optimizer, expr->binary.right, isAssign);
+            assign_var_names(optimizer, expr->binary.left, isAssign);
+            assign_var_names(optimizer, expr->binary.right, isAssign);
         } break;
         
         INVALID_DEFAULT_CASE;
@@ -1042,6 +1045,49 @@ set_usage(Map *usedVars, Expr *expr)
 }
 
 internal void
+copy_expr(AstOptimizer *optimizer, Expr *source, Expr *dest)
+{
+    dest->kind = source->kind;
+    
+    switch (dest->kind)
+    {
+        case Expr_Paren:
+        {
+            dest->paren.expr = ast_alloc_expr(optimizer);
+            copy_expr(optimizer, source->paren.expr, dest->paren.expr);
+        } break;
+        
+        case Expr_Int:
+        {
+            dest->intConst = source->intConst;
+        } break;
+        
+        case Expr_Id:
+        {
+            dest->name = source->name;
+        } break;
+        
+        case Expr_Unary:
+        {
+            dest->unary.op = source->unary.op;
+            dest->unary.expr = ast_alloc_expr(optimizer);
+            copy_expr(optimizer, source->unary.expr, dest->unary.expr);
+        } break;
+        
+        case Expr_Binary:
+        {
+            dest->binary.op = source->binary.op;
+            dest->binary.left = ast_alloc_expr(optimizer);
+            dest->binary.right = ast_alloc_expr(optimizer);
+            copy_expr(optimizer, source->binary.left, dest->binary.left);
+            copy_expr(optimizer, source->binary.right, dest->binary.right);
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+}
+
+internal void
 ast_optimize(AstOptimizer *optimizer)
 {
     // NOTE(michiel): Insert unique variable names
@@ -1054,8 +1100,8 @@ ast_optimize(AstOptimizer *optimizer)
             collapse_parenthesis(optimizer, stmt->assign.right);
             
             i_expect(stmt->assign.left->kind == Expr_Id);
-            insert_var_names(optimizer, stmt->assign.left, true);
-            insert_var_names(optimizer, stmt->assign.right, false);
+            assign_var_names(optimizer, stmt->assign.left, true);
+            assign_var_names(optimizer, stmt->assign.right, false);
              while (stmt->assign.right->kind == Expr_Paren)
             {
                 // NOTE(michiel): Remove extra parenthesized assignments
@@ -1063,6 +1109,18 @@ ast_optimize(AstOptimizer *optimizer)
                 stmt->assign.right = stmt->assign.right->paren.expr;
                 free_expr(optimizer, removal);
             }
+            
+            // NOTE(michiel): Copy over expressions if this assignment has a 
+            // single var as rhs
+            if ((stmt->assign.right->kind == Expr_Id) &&
+                !strings_are_equal(stmt->assign.right->name, create_string("IO")))
+            {
+                Expr *expr = map_get(gAstSymbolExpr, stmt->assign.right->name.data);
+            i_expect(expr);
+                copy_expr(optimizer, expr, stmt->assign.right);
+                }
+            map_put(gAstSymbolExpr, stmt->assign.left->name.data,
+                    stmt->assign.right);
             }
         else
         {

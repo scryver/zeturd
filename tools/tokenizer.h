@@ -13,6 +13,10 @@ typedef enum TokenKind
     TOKEN_DIV = '/',
     // TODO(michiel): etc..
     
+    TOKEN_NOT = '!',
+    TOKEN_INV = '~',
+    TOKEN_NEG = '-',
+    
     TOKEN_ADD = '+',
     TOKEN_SUB = '-',
     

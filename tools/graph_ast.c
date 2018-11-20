@@ -92,6 +92,13 @@ graph_ast_expression(FileStream output, Expr *expr, String connection)
             graph_ast_expression(output, expr->binary.right, opStr);
         } break;
         
+        case Expr_None:
+        {
+            fprintf(stderr, "%.*s:%d:%d: Unexpected freed expression.\n",
+                    expr->origin.filename.size, expr->origin.filename.data,
+                    expr->origin.lineNumber, expr->origin.colNumber);
+        } break;
+        
         INVALID_DEFAULT_CASE;
     }
 }

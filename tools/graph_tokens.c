@@ -122,7 +122,7 @@ graph_token_expr3(TokenGraph *graph, Token **token, String connection)
     if ((*token)->kind == '-')
     {
         String minus = create_string_fmt("minus%d", graph->id++);
-        fprintf(graph->output.file, "  %.*s [label=\"-\"];\n", minus.size, minus.data);
+        fprintf(graph->output.file, "  %.*s [label=\"negate\"];\n", minus.size, minus.data);
         
         if (connection.size)
         {
@@ -130,8 +130,36 @@ graph_token_expr3(TokenGraph *graph, Token **token, String connection)
                     minus.size, minus.data);
         }
         *token = (*token)->nextToken;
-        graph_token_expr4(graph, token, minus);
+        graph_token_expr3(graph, token, minus);
         result = minus;
+    }
+    else if ((*token)->kind == TOKEN_NOT)
+    {
+        String notStr = create_string_fmt("not%d", graph->id++);
+        fprintf(graph->output.file, "  %.*s [label=\"not\"];\n", notStr.size, notStr.data);
+        
+        if (connection.size)
+        {
+            fprintf(graph->output.file, "  %.*s -> %.*s;\n", connection.size, connection.data,
+                    notStr.size, notStr.data);
+        }
+        *token = (*token)->nextToken;
+        graph_token_expr3(graph, token, notStr);
+        result = notStr;
+    }
+    else if ((*token)->kind == TOKEN_INV)
+    {
+        String invert = create_string_fmt("inv%d", graph->id++);
+        fprintf(graph->output.file, "  %.*s [label=\"invert\"];\n", invert.size, invert.data);
+        
+        if (connection.size)
+        {
+            fprintf(graph->output.file, "  %.*s -> %.*s;\n", connection.size, connection.data,
+                    invert.size, invert.data);
+        }
+        *token = (*token)->nextToken;
+        graph_token_expr3(graph, token, invert);
+        result = invert;
     }
     else
     {

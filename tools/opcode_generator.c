@@ -758,8 +758,10 @@ int main(int argc, char **argv)
                 ++trimmed;
             }
             fprintf(stdout, "Trimmed %d expressions\n", trimmed);
-            return 0;
-            
+
+#if 0
+            // TODO(michiel): Make these out of the astOptimizer,
+            // see generate_ir for proper handling of nested expressions
         Program *program = parse(tokens);
         OpCode *opCodes = 0;
         
@@ -884,6 +886,7 @@ optimize_combine_write(&opCodes);
         opCodeStream.file = fopen("gen_cpu.vhd", "wb");
         generate_cpu_main(&opCodeStats, opCodeStream);
         fclose(opCodeStream.file);
+            #endif
     }
         else
         {
