@@ -22,7 +22,12 @@ internal String
 graph_token_expr4(TokenGraph *graph, Token **token, String connection)
 {
     String result = {0};
-    if ((*token)->kind == TOKEN_NUMBER)
+    if ((*token)->kind == TOKEN_LINE_COMMENT)
+    {
+        // NOTE(michiel): Do nothing
+        *token = (*token)->nextToken;
+    }
+    else if ((*token)->kind == TOKEN_NUMBER)
     {
         // NOTE(michiel): Calc something
         String number = (*token)->value;
@@ -141,7 +146,8 @@ graph_token_expr2(TokenGraph *graph, Token **token, String connection)
 {
     String left = graph_token_expr3(graph, token, (String){0,0});
     String op = left;
-    
+    if (left.size)
+    {
     while ((*token)->kind == TOKEN_POW)
     {
         op = create_string_fmt("op%d", graph->id++);
@@ -159,6 +165,7 @@ graph_token_expr2(TokenGraph *graph, Token **token, String connection)
         fprintf(graph->output.file, "  %.*s -> %.*s;\n", connection.size, connection.data,
                 op.size, op.data);
     }
+    }
     
     return op;
 }
@@ -169,6 +176,8 @@ graph_token_expr1(TokenGraph *graph, Token **token, String connection)
     String left = graph_token_expr2(graph, token, (String){0,0});
     String op = left;
     
+    if (left.size)
+    {
     while (((*token)->kind == '*') ||
            ((*token)->kind == '/') ||
            ((*token)->kind == '&'))
@@ -189,6 +198,7 @@ graph_token_expr1(TokenGraph *graph, Token **token, String connection)
         fprintf(graph->output.file, "  %.*s -> %.*s;\n", connection.size, connection.data,
                 op.size, op.data);
     }
+    }
     
     return op;
 }
@@ -199,6 +209,8 @@ graph_token_expr0(TokenGraph *graph, Token **token, String connection)
     String left = graph_token_expr1(graph, token, (String){0,0});
     String op = left;
     
+    if (left.size)
+    {
     while (((*token)->kind == '+') ||
            ((*token)->kind == '-') ||
            ((*token)->kind == '^') ||
@@ -220,6 +232,7 @@ graph_token_expr0(TokenGraph *graph, Token **token, String connection)
     {
         fprintf(graph->output.file, "  %.*s -> %.*s;\n", connection.size, connection.data,
                 op.size, op.data);
+    }
     }
     
     return op;

@@ -137,6 +137,7 @@ typedef struct BufferHeader
 #define buf_clear(buf)          ((buf) ? (buf_len_(buf) = 0, (buf)) : 0)
 #define buf_push(buf, val)      (buf_maybegrow(buf, 1), (buf)[buf_len_(buf)++] = (val))
 #define buf_add(buf, n)         (buf_maybegrow(buf, n), buf_len_(buf) += (n), &(buf)[buf_len_(buf) - (n)])
+#define buf_pop(buf)            ((buf) ? ((buf)[--buf_len_(buf)]) : 0)
 #define buf_last(buf)           ((buf)[buf_len(buf) - 1])
 #define buf_end(buf)            ((buf) + buf_len(buf))
 #define buf_len(buf)            ((buf) ? buf_len_(buf) : 0)

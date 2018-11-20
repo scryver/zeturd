@@ -31,6 +31,26 @@ ast_alloc_expr(AstOptimizer *optimizer)
     return result;
 }
 
+internal Stmt *
+ast_alloc_stmt(AstOptimizer *optimizer)
+{
+     Stmt *result = 0;
+    if (optimizer)
+    {
+        result = optimizer->stmtFreeList;
+        if (result)
+        {
+            optimizer->stmtFreeList = result->nextFree;
+        }
+    }
+    
+    if (!result)
+    {
+        result = ast_alloc_struct(Stmt);
+    }
+    return result;
+}
+
 //
 // NOTE(michiel): Init functions
 //
@@ -89,7 +109,7 @@ create_binary_expr(SourcePos origin, TokenKind op, Expr *left, Expr *right)
 internal Stmt *
 create_stmt(SourcePos origin, StmtKind kind)
 {
-    Stmt *result = ast_alloc_struct(Stmt);
+    Stmt *result = ast_alloc_stmt(0);
     result->origin = origin;
     result->kind = kind;
     return result;
@@ -169,7 +189,12 @@ ast_expression_operand(AstParser *parser)
 {
     Expr *result = 0;
     SourcePos origin = parser->current->origin;
-    if (is_token(parser, TOKEN_NUMBER))
+    if (is_token(parser, TOKEN_LINE_COMMENT))
+    {
+        // NOTE(michiel): Do nothing
+        ast_next_token(parser);
+    } 
+    else if (is_token(parser, TOKEN_NUMBER))
     {
         u64 val = string_to_number(parser->current->value);
         ast_next_token(parser);
@@ -282,6 +307,8 @@ ast_expression_operator(AstParser *parser, u32 precedenceLevel)
 {
     Expr *expr = ast_expression_unary(parser);
     
+    if (expr)
+    {
     OpPrecedence opP = ast_get_op_precedence(parser);
     while ((opP.associate != Associate_None) &&
            (opP.level >= precedenceLevel))
@@ -302,6 +329,7 @@ ast_expression_operator(AstParser *parser, u32 precedenceLevel)
         
         opP = ast_get_op_precedence(parser);
          }
+    }
     
     return expr;
 }
@@ -318,6 +346,8 @@ ast_statement(AstParser *parser)
     SourcePos origin = parser->current->origin;
     Expr *expr = ast_expression(parser);
     Stmt *result = 0;
+    if (expr)
+    {
     if (is_token(parser, '='))
     {
         TokenKind op = parser->current->kind;
@@ -327,6 +357,7 @@ ast_statement(AstParser *parser)
     else
     {
         result = create_hint_stmt(origin, expr);
+    }
     }
     
     return result;
@@ -357,8 +388,12 @@ ast_from_tokens(Token *tokens)
     while (parser.current)
     {
         Stmt *stmt = ast_statement(&parser);
+        if (stmt)
+        {
         buf_push(result->stmts, stmt);
         ++result->stmtCount;
+        }
+        
         do
         {
             if (!is_end_statement(&parser))
@@ -454,6 +489,46 @@ free_expr(AstOptimizer *optimizer, Expr *expr)
     expr->kind = Expr_None;
     expr->nextFree = optimizer->exprFreeList;
     optimizer->exprFreeList = expr;
+}
+
+internal void
+free_all_expr(AstOptimizer *optimizer, Expr *expr)
+{
+    switch (expr->kind)
+    {
+        case Expr_Paren:
+        {
+            free_all_expr(optimizer, expr->paren.expr);
+        } break;
+        
+        case Expr_Int:
+        case Expr_Id:
+        {
+            // NOTE(michiel): Do nothing
+        } break;
+        
+        case Expr_Unary:
+        {
+            free_all_expr(optimizer, expr->unary.expr);
+        } break;
+        
+        case Expr_Binary:
+        {
+            free_all_expr(optimizer, expr->binary.left);
+            free_all_expr(optimizer, expr->binary.right);
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    free_expr(optimizer, expr);
+}
+
+internal void
+free_stmt(AstOptimizer *optimizer, Stmt *stmt)
+{
+    stmt->kind = Stmt_None;
+    stmt->nextFree = optimizer->stmtFreeList;
+    optimizer->stmtFreeList = stmt;
 }
 
 global Map gAstSymbols_;
@@ -932,6 +1007,41 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
 }
 
 internal void
+set_usage(Map *usedVars, Expr *expr)
+{
+    switch (expr->kind)
+    {
+        case Expr_Paren:
+        {
+            set_usage(usedVars, expr->paren.expr);
+        } break;
+        
+        case Expr_Int:
+        {
+            // NOTE(michiel): Do nothing
+        } break;
+        
+        case Expr_Id:
+        {
+            map_put_u64(usedVars, expr->name.data, 1);
+        } break;
+        
+        case Expr_Unary:
+        {
+            set_usage(usedVars, expr->unary.expr);
+        } break;
+        
+        case Expr_Binary:
+        {
+            set_usage(usedVars, expr->binary.left);
+            set_usage(usedVars, expr->binary.right);
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+}
+
+internal void
 ast_optimize(AstOptimizer *optimizer)
 {
     // NOTE(michiel): Insert unique variable names
@@ -999,6 +1109,55 @@ ast_optimize(AstOptimizer *optimizer)
             ++stmtIdx;
         }
     }
+    
+    Map usedVars = {0};
+    for (s32 stmtIdx = optimizer->statements.stmtCount - 1; stmtIdx >= 0; --stmtIdx)
+    {
+        Stmt *stmt = optimizer->statements.stmts[stmtIdx];
+        if (stmt->kind == Stmt_Assign)
+        {
+            i_expect(stmt->assign.left->kind == Expr_Id);
+            b32 isUsed = false;
+            if (!strings_are_equal(stmt->assign.left->name, create_string("IO")))
+            {
+                u64 usage = map_get_u64(&usedVars, stmt->assign.left->name.data);
+                isUsed = (usage != 0);
+                    }
+            else
+            {
+                isUsed = true;
+            }
+            
+            if (isUsed)
+            {
+                set_usage(&usedVars, stmt->assign.right);
+                          }
+            else
+            {
+                Expr *expr = stmt->assign.left;
+                
+                fprintf(stderr, "%.*s:%d:%d: Unused variable %.*s.\n",
+                        expr->origin.filename.size, expr->origin.filename.data,
+                        expr->origin.lineNumber, expr->origin.colNumber,
+                        expr->name.size, expr->name.data);
+                
+                free_all_expr(optimizer, stmt->assign.left);
+                free_all_expr(optimizer, stmt->assign.right);
+                
+                for (u32 moveIdx = stmtIdx;
+                     moveIdx < optimizer->statements.stmtCount - 1; 
+                     ++moveIdx)
+                {
+                    optimizer->statements.stmts[moveIdx] = optimizer->statements.stmts[moveIdx + 1];
+                }
+                buf_pop(optimizer->statements.stmts);
+                --optimizer->statements.stmtCount;
+                free_stmt(optimizer, stmt);
+            }
+        }
+        else
+        {
+            i_expect(stmt->kind == Stmt_Hint);
+        }
+    }
 }
-
-// TODO(michiel): print immediate repr

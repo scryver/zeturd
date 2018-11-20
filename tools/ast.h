@@ -60,6 +60,7 @@ struct Stmt
             Expr *left;
             Expr *right;
         } assign;
+        Stmt *nextFree;
     };
 };
 
@@ -79,4 +80,5 @@ typedef struct AstOptimizer
 {
     StmtList statements;
     Expr *exprFreeList;
+    Stmt *stmtFreeList;
 } AstOptimizer;

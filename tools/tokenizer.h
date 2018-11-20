@@ -33,6 +33,9 @@ typedef enum TokenKind
     TOKEN_POW, // TODO(michiel): Implement (what to use?)
     // maybe ** and do something else for addresses and dereferences
     // like @ for address and $ for dereference
+    
+    TOKEN_LINE_COMMENT,
+    //TOKEN_BLOCK_COMMENT,
 
 TOKEN_EOF,
 

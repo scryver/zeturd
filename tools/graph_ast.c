@@ -67,7 +67,11 @@ graph_ast_expression(FileStream output, Expr *expr, String connection)
         case Expr_Binary:
         {
             String opStr = create_string_fmt("binOp%p", expr);
-            if (expr->binary.op == TOKEN_SLL)
+            if (expr->binary.op == TOKEN_POW)
+            {
+                graph_label(output, opStr, "**");
+            }
+            else if (expr->binary.op == TOKEN_SLL)
             {
                 graph_label(output, opStr, "<<");
             }

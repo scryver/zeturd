@@ -79,7 +79,6 @@ tokenize(Buffer buffer, String filename)
             CASE1(')');
             CASE1('!');
             CASE1('~');
-            CASE1('/');
             CASE1('&');
             CASE1('|');
             CASE1('^');
@@ -92,6 +91,25 @@ tokenize(Buffer buffer, String filename)
             
             CASE2('<', '<', TOKEN_SLL);
             CASE3('>', '>', TOKEN_SRA, '>', TOKEN_SRL);
+            
+            case '/':
+            {
+                token = next_token(result, tokenIndex++);
+                    String value = { .size = 1, .data = (u8 *)eater.scanner };
+                    token->kind = TOKEN_DIV;
+                    token->origin.colNumber = eater.columnNumber;
+                    advance(&eater);
+                    if (eater.scanner[0] && (eater.scanner[0] == '/'))
+                {
+                        token->kind = TOKEN_LINE_COMMENT;
+                    while (eater.scanner[0] != '\n')
+                    {
+                        ++value.size;
+                        advance(&eater);
+                    }
+                        }
+                    token->value = str_internalize(value);
+            } break;
             
             case '0':
             case '1':
