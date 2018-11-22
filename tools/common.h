@@ -34,6 +34,9 @@
 #define U32_MAX   0xFFFFFFFF
 #define U64_MAX   0xFFFFFFFFFFFFFFFF
 
+#define S32_MAX   (s32)0x7FFFFFFF
+#define S32_MIN   (s32)0x80000000
+
 typedef uint8_t   u8;
 typedef uint16_t  u16;
 typedef uint32_t  u32;
@@ -72,6 +75,13 @@ internal inline u32 safe_truncate_to_u32(u64 value)
 {
     i_expect(value <= U32_MAX);
     return (u32)(value & U32_MAX);
+}
+
+internal inline s32 safe_truncate_to_s32(s64 value)
+{
+    i_expect(value <= (s64)S32_MAX);
+    i_expect(value >= (s64)S32_MIN);
+    return (s32)value;
 }
 
 typedef enum AllocateFlags

@@ -62,9 +62,11 @@ generate_constants(OpCodeStats *stats, FileStream output)
     fprintf(output.file, "package constants_and_co is\n\n");
     
     PRINT_CONSTANT(Alu_Noop, stats->aluOpBits);
-    PRINT_CONSTANT(Alu_And, stats->aluOpBits);
     PRINT_CONSTANT(Alu_Or, stats->aluOpBits);
+    PRINT_CONSTANT(Alu_Xor, stats->aluOpBits);
+    PRINT_CONSTANT(Alu_And, stats->aluOpBits);
     PRINT_CONSTANT(Alu_Add, stats->aluOpBits);
+    PRINT_CONSTANT(Alu_Sub, stats->aluOpBits);
     fprintf(output.file, "\n");
     
     PRINT_CONSTANT(Select_Zero, stats->selectBits);
@@ -83,6 +85,9 @@ generate_constants(OpCodeStats *stats, FileStream output)
 internal void
 generate_opcode_vhdl(OpCodeStats *stats, OpCode *opCodes, FileStream output)
 {
+    i_expect(stats->opCodeBits);
+    i_expect(stats->opCodeBitWidth);
+    
     generate_vhdl_header(output);
     
     fprintf(output.file, "entity OpCode is\n");
@@ -101,6 +106,7 @@ generate_opcode_vhdl(OpCodeStats *stats, OpCode *opCodes, FileStream output)
     for (u32 opcIdx = 0; opcIdx < stats->opCodeCount; ++opcIdx)
     {
         u64 opcValue = opcode_packing(stats, &opCodes[opcIdx]);
+        fprintf(stdout, "OPCODE: %016lX\n", opcValue);
         fprintf(output.file, "         %2u => \"%s\"%s\n", opcIdx, generate_bitvalue_cstr(opcValue, stats->opCodeBitWidth),
                 opcIdx < ((1 << stats->opCodeBits) - 1) ? "," : "");
     }
@@ -131,6 +137,7 @@ generate_controller(OpCodeStats *stats, FileStream output)
 {
     i_expect(stats->bitWidth > 0);
     i_expect(stats->bitWidth <= 32);
+    i_expect(stats->immediateBits <= stats->bitWidth);
     
     generate_vhdl_header(output);
     fprintf(output.file, "entity Controller is\n");
@@ -144,22 +151,26 @@ generate_controller(OpCodeStats *stats, FileStream output)
     fprintf(output.file, "        opc       : in  std_logic_vector(%u downto 0);\n\n", stats->opCodeBitWidth - 1);
     fprintf(output.file, "        pc        : out std_logic_vector(%u downto 0);\n", stats->opCodeBits - 1);
     fprintf(output.file, "        immediate : out std_logic_vector(BITS - 1 downto 0);\n\n");
+    
+    if (stats->addressBits > 0)
+    {
     fprintf(output.file, "        mem_write : out std_logic;\n");
     fprintf(output.file, "        mem_reada : out std_logic;\n");
     fprintf(output.file, "        mem_readb : out std_logic;\n");
     fprintf(output.file, "        mem_addra : out std_logic_vector(%u downto 0);\n", stats->addressBits - 1);
-    fprintf(output.file, "        mem_addrb : out std_logic_vector(%u downto 0);\n\n", stats->addressBits - 1);
+        fprintf(output.file, "        mem_addrb : out std_logic_vector(%u downto 0);\n\n", stats->addressBits - 1);
+        fprintf(output.file, "        mem_sel   : out std_logic_vector(%u downto 0);\n", stats->selectBits - 1);
+    }
+    
     fprintf(output.file, "        alu_op    : out std_logic_vector(%u downto 0);\n\n", stats->aluOpBits - 1);
     fprintf(output.file, "        alu_sela  : out std_logic_vector(%u downto 0);\n", stats->selectBits - 1);
     fprintf(output.file, "        alu_selb  : out std_logic_vector(%u downto 0);\n", stats->selectBits - 1);
-    fprintf(output.file, "        mem_sel   : out std_logic_vector(%u downto 0);\n", stats->selectBits - 1);
     fprintf(output.file, "        io_sel    : out std_logic_vector(%u downto 0)\n", stats->selectBits - 1);
     fprintf(output.file, "    );\n");
     fprintf(output.file, "end entity ; -- Controller\n\n");
     
     fprintf(output.file, "architecture FSM of Controller is\n\n");
     fprintf(output.file, "    signal pc_counter       : unsigned(%u downto 0);\n\n", stats->opCodeBits - 1);
-    fprintf(output.file, "    signal immediate_inter  : std_logic_vector(%u downto 0);\n\n", ((stats->immediateBits < stats->bitWidth) ? stats->bitWidth : stats->immediateBits) - 1);
     fprintf(output.file, "begin\n\n");
     
     fprintf(output.file, "    pc        <= std_logic_vector(pc_counter);\n");
@@ -175,6 +186,8 @@ generate_controller(OpCodeStats *stats, FileStream output)
                 fprintf(output.file, "    immediate <= opc(BITS - 1 downto 0) when (opc(%u) = '0') else (others => '0');\n\n", get_offset_useB(stats));
     }
     
+    if (stats->addressBits > 0)
+    {
     fprintf(output.file, "    mem_write <= opc(%u);\n", get_offset_mem_write(stats));
     fprintf(output.file, "    mem_reada <= opc(%u);\n", get_offset_mem_read_a(stats));
     fprintf(output.file, "    mem_readb <= opc(%u);\n", get_offset_mem_read_b(stats));
@@ -182,15 +195,16 @@ generate_controller(OpCodeStats *stats, FileStream output)
             get_offset_addr_a(stats) + stats->addressBits - 1, get_offset_addr_a(stats));
     fprintf(output.file, "    mem_addrb <= opc(%u downto %u) when (opc(%u) = '1') "
             "else (others => '0');\n\n", 
-            get_offset_addr_b(stats) + stats->addressBits - 1, get_offset_addr_b(stats), get_offset_useB(stats));
+                get_offset_addr_b(stats) + stats->addressBits - 1, get_offset_addr_b(stats), get_offset_useB(stats));
+        fprintf(output.file, "    mem_sel   <= opc(%u downto %u);\n",
+                get_offset_sel_mem(stats) + stats->selectBits - 1, get_offset_sel_mem(stats));
+    }
     fprintf(output.file, "    alu_op    <= opc(%u downto %u);\n\n",
             get_offset_alu_op(stats) + stats->aluOpBits - 1, get_offset_alu_op(stats));
     fprintf(output.file, "    alu_sela  <= opc(%u downto %u);\n",
             get_offset_sel_alu_a(stats) + stats->selectBits - 1, get_offset_sel_alu_a(stats));
     fprintf(output.file, "    alu_selb  <= opc(%u downto %u);\n",
             get_offset_sel_alu_b(stats) + stats->selectBits - 1, get_offset_sel_alu_b(stats));
-    fprintf(output.file, "    mem_sel   <= opc(%u downto %u);\n",
-            get_offset_sel_mem(stats) + stats->selectBits - 1, get_offset_sel_mem(stats));
     fprintf(output.file, "    io_sel    <= opc(%u downto %u);\n\n",
             get_offset_sel_io(stats) + stats->selectBits - 1, get_offset_sel_io(stats));
     
@@ -231,6 +245,8 @@ generate_controller(OpCodeStats *stats, FileStream output)
 internal void
 generate_registers(OpCodeStats *stats, FileStream output)
 {
+    i_expect(stats->addressBits);
+    
     generate_vhdl_header(output);
     
     fprintf(output.file, "entity Registers is\n");
@@ -358,8 +374,11 @@ generate_cpu_main(OpCodeStats *stats, FileStream output)
     fprintf(output.file, "    signal pc  : std_logic_vector(%u downto 0);\n", stats->opCodeBits - 1);
     fprintf(output.file, "    signal opc : std_logic_vector(%u downto 0);\n\n", stats->opCodeBitWidth - 1);
     fprintf(output.file, "    signal cpu_mem, mem_outa, mem_outb : std_logic_vector(BITS - 1 downto 0);\n\n");
+    if (stats->addressBits > 0)
+    {
     fprintf(output.file, "    signal mem_addra, mem_addrb : std_logic_vector(%u downto 0);\n", stats->addressBits - 1);
     fprintf(output.file, "    signal mem_write, mem_reada, mem_readb : std_logic;\n\n");
+    }
     fprintf(output.file, "    signal alu_a, alu_b : std_logic_vector(BITS - 1 downto 0);\n");
     fprintf(output.file, "    signal alu_out : std_logic_vector(BITS downto 0);\n");
     fprintf(output.file, "    signal alu_trunc : std_logic_vector(BITS - 1 downto 0);\n\n");
@@ -402,6 +421,8 @@ generate_cpu_main(OpCodeStats *stats, FileStream output)
     fprintf(output.file, "        pc       => pc,\n");
     fprintf(output.file, "        opc      => opc);\n\n");
     
+    if (stats->addressBits > 0)
+    {
     fprintf(output.file, "    registers : entity work.Registers\n");
     fprintf(output.file, "    generic map (\n");
     fprintf(output.file, "        BITS       => BITS\n");
@@ -417,6 +438,7 @@ generate_cpu_main(OpCodeStats *stats, FileStream output)
     fprintf(output.file, "        rd_b       => mem_readb,\n");
     fprintf(output.file, "        data_out_a => mem_outa,\n");
     fprintf(output.file, "        data_out_b => mem_outb);\n\n");
+    }
     
     fprintf(output.file, "    alu : entity work.ALU\n");
     fprintf(output.file, "    generic map (BITS => BITS)\n");
@@ -437,15 +459,18 @@ generate_cpu_main(OpCodeStats *stats, FileStream output)
     fprintf(output.file, "        opc        => opc,\n");
     fprintf(output.file, "        pc         => pc,\n");
     fprintf(output.file, "        immediate  => immediate,\n");
+    if (stats->addressBits > 0)
+    {
     fprintf(output.file, "        mem_write  => mem_write,\n");
     fprintf(output.file, "        mem_reada  => mem_reada,\n");
     fprintf(output.file, "        mem_readb  => mem_readb,\n");
     fprintf(output.file, "        mem_addra  => mem_addra,\n");
     fprintf(output.file, "        mem_addrb  => mem_addrb,\n");
+    fprintf(output.file, "        mem_sel    => mem_sel,\n");
+    }
     fprintf(output.file, "        alu_op     => alu_op,\n");
     fprintf(output.file, "        alu_sela   => alu_sela,\n");
     fprintf(output.file, "        alu_selb   => alu_selb,\n");
-    fprintf(output.file, "        mem_sel    => mem_sel,\n");
     fprintf(output.file, "        io_sel     => io_sel);\n\n");
     
     fprintf(output.file, "end architecture ; -- RTL\n");

@@ -23,7 +23,7 @@ internal inline u32
 log2_up(u32 value)
 {
     u32 bitPos = 0;
-        while ((1 << bitPos) <= value)
+    while (((u64)1 << bitPos) <= value)
         {
             ++bitPos;
         }
@@ -39,15 +39,6 @@ string_length(char *cString)
         ++length;
     }
     return length;
-}
-
-internal inline String
-create_string(char *cString)
-{
-    String result = {0};
-    result.size = string_length(cString);
-    result.data = (u8 *)cString;
-    return result;
 }
 
 internal b32
@@ -127,11 +118,28 @@ str_internalize(String str)
     return (String){.size=newIntern->size, .data=(u8 *)newIntern->data};
 }
 
-internal String
+internal inline String
+create_string_(char *cString)
+{
+    String result = {0};
+    result.size = string_length(cString);
+    result.data = (u8 *)cString;
+    return result;
+}
+
+internal inline String
+create_string(char *cString)
+{
+    String str = create_string_(cString);
+    String result = str_internalize(str);
+    return result;
+}
+
+internal inline String
 str_internalize_cstring(char *cString)
 {
-    String str = create_string(cString);
-    return str_internalize(str);
+      String result = create_string(cString);
+    return result;
 }
 
 internal inline String
@@ -146,7 +154,7 @@ create_string_fmt(char *fmt, ...)
     
     i_expect(written < sizeof(buffer));
     buffer[written] = 0;
-    return str_internalize_cstring(buffer);
+    return create_string(buffer);
 }
 
 internal s64
@@ -182,7 +190,23 @@ string_to_number(String s)
     for (u32 sIdx = 0; sIdx < s.size; ++sIdx)
     {
         result *= base;
-        s64 adding = s.data[sIdx] - '0';
+        s64 adding = 0;
+        if (('0' <= s.data[sIdx]) &&
+            (s.data[sIdx] <= '9'))
+        {
+        adding = s.data[sIdx] - '0';
+        }
+        else if (('a' <= s.data[sIdx]) && (s.data[sIdx] <= 'f'))
+        {
+            i_expect(base == 16);
+            adding = (s.data[sIdx] - 'a') + 10;
+        }
+        else 
+        {
+            i_expect(('A' <= s.data[sIdx]) && (s.data[sIdx] <= 'F'));
+            i_expect(base == 16);
+            adding = (s.data[sIdx] - 'A') + 10;
+        }
         i_expect(adding >= 0);
         i_expect(adding < base);
         result += adding;

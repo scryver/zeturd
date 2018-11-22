@@ -1,0 +1,3 @@
+X = IO
+Y = IO + X
+IO = Y

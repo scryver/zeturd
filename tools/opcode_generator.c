@@ -11,7 +11,7 @@
 
 #define REG_MAX (1 << 9)
 
-enum Selection
+typedef enum Selection
 {
     Select_Zero,
     Select_MemoryA,
@@ -21,23 +21,45 @@ enum Selection
     Select_Alu,
     
     Select_Count,
+} Selection;
+
+global char *gSelectionNames[Select_Count] = 
+{
+    [Select_Zero] = "Zero",
+    [Select_MemoryA] = "MemA",
+    [Select_MemoryB] = "MemB",
+    [Select_Immediate] = "Imm",
+    [Select_IO] = "In",
+    [Select_Alu] = "Alu",
 };
 
-enum AluOp
+typedef enum AluOp
 {
     Alu_Noop,
-    Alu_And,
     Alu_Or,
+    Alu_Xor,
+    Alu_And,
     Alu_Add,
+    Alu_Sub,
     
     Alu_Count,
+} AluOp;
+
+global char *gAluOpNames[Alu_Count] = 
+{
+    [Alu_Noop] = "Thru",
+    [Alu_Or] = "Or",
+    [Alu_Xor] = "Xor",
+    [Alu_And] = "And",
+    [Alu_Add] = "Add",
+    [Alu_Sub] = "Sub",
 };
 
 typedef struct Alu
 {
-    enum Selection inputA;
-    enum Selection inputB;
-    enum AluOp op;
+     Selection inputA;
+     Selection inputB;
+     AluOp op;
 } Alu;
 
 typedef struct Register
@@ -46,22 +68,22 @@ typedef struct Register
     {
     struct
     {
-            b8 memoryWrite;
-            b8 memoryReadA;
-            b8 memoryReadB;
+            b8 write;
+            b8 readA;
+            b8 readB;
     };
         u32 control;
     };
     
-    enum Selection input;
-    u32 writeAddr;
-    u32 readAddrA;
-    u32 readAddrB;
+     Selection input;
+    u32 wAddr;
+    u32 rAddrA;
+    u32 rAddrB;
 } Register;
 
 typedef struct IOOut
 {
-    enum Selection output;
+     Selection output;
 } IOOut;
 
 typedef struct OpCodeEntry
@@ -79,7 +101,7 @@ b32      useIOOut;
     IOOut    output;
     
     b32      useImmediate;
-    u32      immediate;
+    s32      immediate;
     } OpCodeEntry;
 
 typedef struct OpCode
@@ -95,7 +117,7 @@ typedef struct OpCode
     b32 memoryReadB;
     b32 memoryWrite;
     
-    u32 immediate;
+    s32 immediate;
     u32 memoryAddrA;
     u32 memoryAddrB;
 } OpCode;
@@ -123,8 +145,7 @@ typedef struct OpCodeStats
 
 typedef struct OpCodeBuilder
 {
-    u32 maxOpCodes;
-    u32 opCodeCount;
+    //u32 opCodeCount;
     OpCodeEntry *entries;
     
     u32 registerCount;
@@ -132,6 +153,8 @@ typedef struct OpCodeBuilder
     
     OpCodeStats stats;
 } OpCodeBuilder;
+
+#include "./opc_builder.c"
 
 internal b32 opc_only_selection(OpCode *opCode)
 {
@@ -179,25 +202,26 @@ internal u32 opc_max_immediate(u32 opCount, OpCode *opCodes)
     for (u32 opIdx = 0; opIdx < opCount; ++opIdx)
     {
         OpCode opCode = opCodes[opIdx];
-        if (maxImmediate < opCode.immediate)
+        if (maxImmediate < (u32)opCode.immediate)
         {
-            maxImmediate = opCode.immediate;
+            maxImmediate = (u32)opCode.immediate;
         }
     }
     return maxImmediate;
 }
 
-internal u32 opc_max_address(u32 opCount, OpCode *opCodes)
+internal s32 opc_max_address(u32 opCount, OpCode *opCodes)
 {
-    u32 maxAddress = 0;
+    s32 maxAddress = -1;
     for (u32 opIdx = 0; opIdx < opCount; ++opIdx)
     {
         OpCode opCode = opCodes[opIdx];
-        if (maxAddress < opCode.memoryAddrA)
+        if ((opCode.memoryReadA || opCode.memoryWrite) && 
+            (maxAddress < safe_truncate_to_s32(opCode.memoryAddrA)))
         {
             maxAddress = opCode.memoryAddrA;
         }
-        if (maxAddress < opCode.memoryAddrB)
+        if (opCode.memoryReadB && (maxAddress < safe_truncate_to_s32(opCode.memoryAddrB)))
         {
             maxAddress = opCode.memoryAddrB;
         }
@@ -318,22 +342,22 @@ opcode_packing(OpCodeStats *stats, OpCode *opCode)
     // TODO(michiel): Masking?
     if (opCode->immediate)
     {
-        result |= (opCode->immediate << get_offset_immediate(stats));
+        result |= ((opCode->immediate & ((1ULL << stats->bitWidth) - 1)) << get_offset_immediate(stats));
     }
-    if (opCode->memoryAddrB)
+    else if (opCode->memoryAddrB)
     {
-        result |= (opCode->memoryAddrB << get_offset_addr_b(stats));
+        result |= ((u64)opCode->memoryAddrB << get_offset_addr_b(stats));
     }
-    result |= (opCode->memoryAddrA << get_offset_addr_a(stats));
-    result |= ((opCode->memoryReadB ? 1 : 0) << get_offset_useB(stats)); // TODO(michiel): Remove
-    result |= ((opCode->memoryWrite) << get_offset_mem_write(stats));
-    result |= ((opCode->memoryReadA) << get_offset_mem_read_a(stats));
-    result |= ((opCode->memoryReadB) << get_offset_mem_read_b(stats));
-    result |= (opCode->aluOperation << get_offset_alu_op(stats));
-    result |= (opCode->selectAluA << get_offset_sel_alu_a(stats));
-    result |= (opCode->selectAluB << get_offset_sel_alu_b(stats));
-    result |= (opCode->selectMem << get_offset_sel_mem(stats));
-    result |= (opCode->selectIO << get_offset_sel_io(stats));
+    result |= ((u64)opCode->memoryAddrA << get_offset_addr_a(stats));
+    result |= ((u64)(opCode->memoryReadB ? 1 : 0) << get_offset_useB(stats)); // TODO(michiel): Remove
+    result |= ((u64)(opCode->memoryWrite) << get_offset_mem_write(stats));
+    result |= ((u64)(opCode->memoryReadA) << get_offset_mem_read_a(stats));
+    result |= ((u64)(opCode->memoryReadB) << get_offset_mem_read_b(stats));
+    result |= ((u64)opCode->aluOperation << get_offset_alu_op(stats));
+    result |= ((u64)opCode->selectAluA << get_offset_sel_alu_a(stats));
+    result |= ((u64)opCode->selectAluB << get_offset_sel_alu_b(stats));
+    result |= ((u64)opCode->selectMem << get_offset_sel_mem(stats));
+    result |= ((u64)opCode->selectIO << get_offset_sel_io(stats));
     
     return result;
 }
@@ -362,9 +386,11 @@ alu_op_to_string(enum AluOp aluOp)
     switch (aluOp)
     {
         case Alu_Noop: { result = "NoOp"; } break;
-        case Alu_And:  { result = "And"; } break;
         case Alu_Or:   { result = "Or"; } break;
+        case Alu_Xor:  { result = "Xor"; } break;
+        case Alu_And:  { result = "And"; } break;
         case Alu_Add:  { result = "Add"; } break;
+        case Alu_Sub:  { result = "Sub"; } break;
         INVALID_DEFAULT_CASE;
     }
     return result;
@@ -431,18 +457,39 @@ print_opcode(FileStream output, OpCodeStats *stats, OpCode *opcode)
 }
 
 internal OpCodeStats
-get_opcode_stats(u32 opCount, OpCode *opCodes)
+get_opcode_stats(u32 opCount, OpCode *opCodes, u32 bitWidth)
 {
     OpCodeStats result = {0};
+    
+    result.bitWidth = bitWidth;
     
     result.maxSelect = Select_Count - 1;
     result.selectBits = log2_up(result.maxSelect);
     result.maxAluOp = Alu_Count - 1;
     result.aluOpBits = log2_up(result.maxAluOp);
-    result.maxImmediate = opc_max_immediate(opCount, opCodes);
-    result.immediateBits = log2_up(result.maxImmediate);
-    result.maxAddress = opc_max_address(opCount, opCodes);
+    
+    //result.maxImmediate = opc_max_immediate(opCount, opCodes);
+    //result.immediateBits = log2_up(result.maxImmediate);
+    result.maxImmediate = (u32)((1ULL << bitWidth) - 1);
+    result.immediateBits = bitWidth;
+    i_expect(opc_max_immediate(opCount, opCodes) <= result.maxImmediate);
+    
+    s32 maxAddress = opc_max_address(opCount, opCodes);
+    if (maxAddress < 0)
+    {
+        result.maxAddress = 0;
+        result.addressBits = 0;
+    }
+    else if (maxAddress == 0)
+    {
+        result.maxAddress = 0;
+        result.addressBits = 1;
+    }
+    else
+    {
+        result.maxAddress = (u32)maxAddress;
     result.addressBits = log2_up(result.maxAddress);
+    }
     fprintf(stdout, "Max addr: %u, addr bits: %u\n", result.maxAddress, result.addressBits);
     
     result.opCodeCount = opCount;
@@ -479,9 +526,9 @@ get_register_address(Map *registerMap, String name, u32 *registerCount)
 }
 
 internal void
-build_expression(Expression *expr, OpCodeBuilder *builder)
+build_expression(OpCodeBuilder *builder, Expr *expr)
 {
-    // TODO(michiel): First ssa and constant folding e.d.
+    // TODO(michiel): Implement new expression tree
     OpCodeEntry op = {0};
     op.useAlu = true;
         
@@ -517,7 +564,7 @@ build_expression(Expression *expr, OpCodeBuilder *builder)
     else
     {
         i_expect(expr->leftKind == EXPRESSION_EXPR);
-        build_expression(expr->leftExpr, builder);
+        build_expression(builder, expr->leftExpr);
         op.alu.inputA = Select_Alu;
     }
     
@@ -758,19 +805,69 @@ int main(int argc, char **argv)
                 ++trimmed;
             }
             fprintf(stdout, "Trimmed %d expressions\n", trimmed);
-
-#if 0
+            
             // TODO(michiel): Make these out of the astOptimizer,
             // see generate_ir for proper handling of nested expressions
-        Program *program = parse(tokens);
-        OpCode *opCodes = 0;
-        
-        b32 synced = false;
-        
-        // print_tokens(tokens);
-        print_parsed_program(outputStream, program);
-            graph_program(program, "program.dot");
+            OpCodeBuilder builder = {0};
             
+            generate_opcodes(&builder, &astOptimizer);
+            //print_opcodes(buf_len(builder.entries), builder.entries);
+            
+            OpCode *opCodes = layout_instructions(&builder);
+            
+             builder.stats = get_opcode_stats(buf_len(opCodes), opCodes, 32);
+            builder.stats.synced = false;
+            
+            fprintf(stdout, "Stats:\n");
+            fprintf(stdout, "  SEL: Max = %u, Bits = %u\n", builder.stats.maxSelect, builder.stats.selectBits);
+            fprintf(stdout, "  ALU: Max = %u, Bits = %u\n", builder.stats.maxAluOp, builder.stats.aluOpBits);
+            fprintf(stdout, "  IMM: Max = %u, Bits = %u\n", builder.stats.maxImmediate, builder.stats.immediateBits);
+            fprintf(stdout, "  ADR: Max = %u, Bits = %u\n", builder.stats.maxAddress, builder.stats.addressBits);
+
+#if 0            
+            u32 inputs[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+            simulate(&builder.stats, buf_len(opCodes), opCodes, array_count(inputs), inputs,
+                     100);
+            #endif
+            
+#if 0
+            FileStream printStream = {0};
+            printStream.file = fopen("opcodes.list", "wb");
+            printStream.verbose = true;
+            for (u32 opIdx = 0; opIdx < buf_len(opCodes); ++opIdx)
+            {
+                print_opcode(printStream, &builder.stats, opCodes + opIdx);
+            }
+#endif
+            test_graph("testing.dot", builder.registerCount, buf_len(opCodes), opCodes, false);
+            test_graph("opcodes.dot", builder.registerCount, buf_len(opCodes), opCodes, true);
+            //save_graph("opcodes.dot", gRegisterCount, buf_len(opCodes), opCodes);
+            
+            FileStream opCodeStream = {0};
+            opCodeStream.file = fopen("gen_opcodes.vhd", "wb");
+            generate_opcode_vhdl(&builder.stats, opCodes, opCodeStream);
+            fclose(opCodeStream.file);
+            
+            opCodeStream.file = fopen("gen_controller.vhd", "wb");
+            generate_controller(&builder.stats, opCodeStream);
+            fclose(opCodeStream.file);
+            
+            opCodeStream.file = fopen("gen_constants.vhd", "wb");
+            generate_constants(&builder.stats, opCodeStream);
+            fclose(opCodeStream.file);
+            
+            if (builder.stats.addressBits > 0)
+            {
+            opCodeStream.file = fopen("gen_registers.vhd", "wb");
+            generate_registers(&builder.stats, opCodeStream);
+            fclose(opCodeStream.file);
+            }
+            
+            opCodeStream.file = fopen("gen_cpu.vhd", "wb");
+            generate_cpu_main(&builder.stats, opCodeStream);
+            fclose(opCodeStream.file);
+            
+        #if 0
         for (u32 stmtIdx = 0; stmtIdx < program->nrStatements; ++stmtIdx)
         {
             Statement *statement = program->statements + stmtIdx;
@@ -838,54 +935,6 @@ optimize_combine_write(&opCodes);
             prevCount = curCount;
         }
         #endif
-
-        OpCodeStats opCodeStats = get_opcode_stats(buf_len(opCodes), opCodes);
-        fprintf(stdout, "Stats:\n");
-        fprintf(stdout, "  SEL: Max = %u, Bits = %u\n", opCodeStats.maxSelect, opCodeStats.selectBits);
-        fprintf(stdout, "  ALU: Max = %u, Bits = %u\n", opCodeStats.maxAluOp, opCodeStats.aluOpBits);
-        fprintf(stdout, "  IMM: Max = %u, Bits = %u\n", opCodeStats.maxImmediate, opCodeStats.immediateBits);
-        fprintf(stdout, "  ADR: Max = %u, Bits = %u\n", opCodeStats.maxAddress, opCodeStats.addressBits);
-            
-            u32 inputs[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-            simulate(&opCodeStats, buf_len(opCodes), opCodes, array_count(inputs), inputs,
-                     100);
-            
-#if 1
-            FileStream printStream = {0};
-            printStream.file = fopen("opcodes.list", "wb");
-            printStream.verbose = true;
-        for (u32 opIdx = 0; opIdx < buf_len(opCodes); ++opIdx)
-        {
-            print_opcode(printStream, &opCodeStats, opCodes + opIdx);
-        }
-        #endif
-            test_graph("testing.dot", gRegisterCount, buf_len(opCodes), opCodes, false);
-            test_graph("opcodes.dot", gRegisterCount, buf_len(opCodes), opCodes, true);
-        //save_graph("opcodes.dot", gRegisterCount, buf_len(opCodes), opCodes);
-        
-        opCodeStats.synced = synced;
-        opCodeStats.bitWidth = 8;
-        
-        FileStream opCodeStream = {0};
-        opCodeStream.file = fopen("gen_opcodes.vhd", "wb");
-        generate_opcode_vhdl(&opCodeStats, opCodes, opCodeStream);
-        fclose(opCodeStream.file);
-        
-        opCodeStream.file = fopen("gen_controller.vhd", "wb");
-        generate_controller(&opCodeStats, opCodeStream);
-        fclose(opCodeStream.file);
-        
-        opCodeStream.file = fopen("gen_constants.vhd", "wb");
-        generate_constants(&opCodeStats, opCodeStream);
-        fclose(opCodeStream.file);
-        
-        opCodeStream.file = fopen("gen_registers.vhd", "wb");
-        generate_registers(&opCodeStats, opCodeStream);
-        fclose(opCodeStream.file);
-        
-        opCodeStream.file = fopen("gen_cpu.vhd", "wb");
-        generate_cpu_main(&opCodeStats, opCodeStream);
-        fclose(opCodeStream.file);
             #endif
     }
         else

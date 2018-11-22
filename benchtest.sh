@@ -9,7 +9,13 @@ testDir="$codeDir/testbenches"
 buildDir="$curDir/gebouw"
 tbDir="$curDir/gebouw/tbs"
 
-./tool_build.sh "$curDir/swsrc/thurd.turd"
+if [ -z "$1" ]; then
+  sourceFile="$curDir/swsrc/thurd.turd"
+else
+  sourceFile="$(readlink -f $1)"
+fi
+
+./tool_build.sh "$sourceFile"
 
 mkdir -p "$tbDir"
 

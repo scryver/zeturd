@@ -541,6 +541,7 @@ global String gKeyWordNames[] =
 {
     {6, (u8 *)"SYNCED"},
     {2, (u8 *)"IO"},
+    {3, (u8 *)"ALU"},
 };
 
 internal b32
@@ -808,7 +809,8 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
             #if 0
         // NOTE(michiel): Swap IO to be as far left as possible for constant optimizations
             if ((expr->binary.right->kind == Expr_Id) &&
-                strings_are_equal(expr->binary.right->name, create_string("IO")) &&
+                (strings_are_equal(expr->binary.right->name, create_string("IO")) ||
+                 strings_are_equal(expr->binary.right->name, create_string("ALU"))) &&
                 get_op_precedence(expr->binary.op).commutative)
             {
                 Expr *temp = expr->binary.right;
@@ -847,7 +849,8 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
                      (rightOpP.commutative && 
                       (right->binary.right->kind == Expr_Int) &&
                       (right->binary.left->kind == Expr_Id) &&
-                      strings_are_equal(right->binary.left->name, create_string("IO"))))
+                         (strings_are_equal(right->binary.left->name, create_string("IO")) ||
+                          strings_are_equal(right->binary.left->name, create_string("ALU")))))
                 {
                     if (right->binary.left->kind == Expr_Id)
                         {
@@ -931,7 +934,8 @@ combine_const(AstOptimizer *optimizer, Expr *expr)
                      (leftOpP.commutative && 
                       (left->binary.left->kind == Expr_Int) &&
                       (left->binary.right->kind == Expr_Id) &&
-                      strings_are_equal(left->binary.right->name, create_string("IO"))))
+                         (strings_are_equal(left->binary.right->name, create_string("IO")) ||
+                          strings_are_equal(left->binary.right->name, create_string("ALU")))))
                 {
                     if (left->binary.right->kind == Expr_Id)
                     {
@@ -1026,7 +1030,9 @@ set_usage(Map *usedVars, Expr *expr)
         
         case Expr_Id:
         {
-            map_put_u64(usedVars, expr->name.data, 1);
+            u64 useCount = map_get_u64(usedVars, expr->name.data);
+            ++useCount;
+            map_put_u64(usedVars, expr->name.data, useCount);
         } break;
         
         case Expr_Unary:
@@ -1087,10 +1093,46 @@ copy_expr(AstOptimizer *optimizer, Expr *source, Expr *dest)
     }
 }
 
-internal void
-ast_optimize(AstOptimizer *optimizer)
+internal b32
+not_an_io_expr(Expr *expr)
 {
-    // NOTE(michiel): Insert unique variable names
+    b32 result = true;
+    switch (expr->kind)
+    {
+        case Expr_Paren:
+        {
+            result = not_an_io_expr(expr->paren.expr);
+        } break;
+        
+        case Expr_Int:
+        {
+            // NOTE(michiel): Do nothing
+        } break;
+        
+        case Expr_Id:
+        {
+            result = !strings_are_equal(expr->name, create_string("IO"));
+        } break;
+        
+        case Expr_Unary:
+        {
+            result = not_an_io_expr(expr->unary.expr);
+        } break;
+        
+        case Expr_Binary:
+        {
+            result &= not_an_io_expr(expr->binary.left);
+            result &= not_an_io_expr(expr->binary.right);
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    return result;
+}
+
+internal void
+ast_collapse_parenthesis(AstOptimizer *optimizer)
+{
     for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
     {
         Stmt *stmt = optimizer->statements.stmts[stmtIdx];
@@ -1098,36 +1140,75 @@ ast_optimize(AstOptimizer *optimizer)
         {
             collapse_parenthesis(optimizer, stmt->assign.left);
             collapse_parenthesis(optimizer, stmt->assign.right);
-            
-            i_expect(stmt->assign.left->kind == Expr_Id);
-            assign_var_names(optimizer, stmt->assign.left, true);
-            assign_var_names(optimizer, stmt->assign.right, false);
-             while (stmt->assign.right->kind == Expr_Paren)
+            while (stmt->assign.right->kind == Expr_Paren)
             {
                 // NOTE(michiel): Remove extra parenthesized assignments
                 Expr *removal = stmt->assign.right;
                 stmt->assign.right = stmt->assign.right->paren.expr;
                 free_expr(optimizer, removal);
             }
-            
-            // NOTE(michiel): Copy over expressions if this assignment has a 
-            // single var as rhs
-            if ((stmt->assign.right->kind == Expr_Id) &&
-                !strings_are_equal(stmt->assign.right->name, create_string("IO")))
-            {
-                Expr *expr = map_get(gAstSymbolExpr, stmt->assign.right->name.data);
-            i_expect(expr);
-                copy_expr(optimizer, expr, stmt->assign.right);
-                }
-            map_put(gAstSymbolExpr, stmt->assign.left->name.data,
-                    stmt->assign.right);
-            }
+        }
         else
         {
             i_expect(stmt->kind == Stmt_Hint);
         }
     }
-    
+}
+
+internal void
+ast_assign_var_names(AstOptimizer *optimizer)
+{
+    // NOTE(michiel): Insert unique variable names
+    for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
+    {
+        Stmt *stmt = optimizer->statements.stmts[stmtIdx];
+        if (stmt->kind == Stmt_Assign)
+        {
+            i_expect(stmt->assign.left->kind == Expr_Id);
+            assign_var_names(optimizer, stmt->assign.left, true);
+            assign_var_names(optimizer, stmt->assign.right, false);
+        }
+        else
+        {
+            i_expect(stmt->kind == Stmt_Hint);
+        }
+    }
+}
+
+internal void
+ast_expand_single_assignment(AstOptimizer *optimizer)
+{
+    for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount; ++stmtIdx)
+    {
+        Stmt *stmt = optimizer->statements.stmts[stmtIdx];
+        if (stmt->kind == Stmt_Assign)
+        {
+            i_expect(stmt->assign.left->kind == Expr_Id);
+            // NOTE(michiel): Copy over expressions if this assignment has a 
+            // single var as rhs
+            if ((stmt->assign.right->kind == Expr_Id) && 
+                not_an_io_expr(stmt->assign.right))
+            {
+                Expr *expr = map_get(gAstSymbolExpr, stmt->assign.right->name.data);
+                i_expect(expr);
+                if (expr && expr->kind && not_an_io_expr(expr))
+                {
+                copy_expr(optimizer, expr, stmt->assign.right);
+            }
+                }
+            map_put(gAstSymbolExpr, stmt->assign.left->name.data,
+                    stmt->assign.right);
+        }
+        else
+        {
+            i_expect(stmt->kind == Stmt_Hint);
+        }
+    }
+}
+
+internal void
+ast_combine_const(AstOptimizer *optimizer)
+{
     // NOTE(michiel): Combine constants and record assignments of constants
     for (u32 stmtIdx = 0; stmtIdx < optimizer->statements.stmtCount;)
     {
@@ -1141,8 +1222,8 @@ ast_optimize(AstOptimizer *optimizer)
                 i_expect(stmt->assign.left->kind == Expr_Id);
                 if (!is_key_word(stmt->assign.left->name))
                 {
-                map_put(gConstSymbols, stmt->assign.left->name.data,
-                        stmt->assign.right);
+                    map_put(gConstSymbols, stmt->assign.left->name.data,
+                            stmt->assign.right);
                     for (s32 moveIdx = stmtIdx;
                          moveIdx < (optimizer->statements.stmtCount - 1);
                          ++moveIdx)
@@ -1160,15 +1241,72 @@ ast_optimize(AstOptimizer *optimizer)
             {
                 ++stmtIdx;
             }
-            }
+        }
         else
         {
             combine_const(optimizer, stmt->expr);
             ++stmtIdx;
         }
     }
+}
+
+internal b32
+replace_usage_to_alu_expr(AstOptimizer *optimizer, Expr *expr, String name)
+{
+    b32 found = false;
     
+    Expr *toCheck = 0;
+    switch (expr->kind)
+    {
+        case Expr_Paren: { toCheck = expr->paren.expr; } break;
+        case Expr_Int: {} break;
+        case Expr_Id: { toCheck = expr; } break;
+        case Expr_Unary: { toCheck = expr->unary.expr; } break;
+        case Expr_Binary: { toCheck = expr->binary.left; } break;
+        INVALID_DEFAULT_CASE;
+    }
+    
+    if (toCheck)
+    {
+        if (toCheck->kind == Expr_Id)
+        {
+            if (strings_are_equal(expr->name, name))
+            {
+                found = true;
+                expr->name = create_string("ALU");
+            }
+        }
+        
+        if (!found && (expr->kind == Expr_Binary))
+        {
+            if ((expr->binary.right->kind == Expr_Id) &&
+                strings_are_equal(expr->binary.right->name, name))
+            {
+                found = true;
+                expr->binary.right->name = create_string("ALU");
+            }
+        }
+    }
+    
+    return found;
+}
+
+internal b32
+replace_usage_to_alu(AstOptimizer *optimizer, Stmt *stmt, String name)
+{
+    i_expect(stmt->kind == Stmt_Assign);
+    
+    Expr *expr = stmt->assign.right;
+    b32 found = replace_usage_to_alu_expr(optimizer, expr, name);
+    
+    return found;
+}
+
+internal void
+ast_remove_unused(AstOptimizer *optimizer)
+{
     Map usedVars = {0};
+    Stmt *nextStmt = 0;
     for (s32 stmtIdx = optimizer->statements.stmtCount - 1; stmtIdx >= 0; --stmtIdx)
     {
         Stmt *stmt = optimizer->statements.stmts[stmtIdx];
@@ -1176,11 +1314,21 @@ ast_optimize(AstOptimizer *optimizer)
         {
             i_expect(stmt->assign.left->kind == Expr_Id);
             b32 isUsed = false;
-            if (!strings_are_equal(stmt->assign.left->name, create_string("IO")))
+            if (!strings_are_equal(stmt->assign.left->name, create_string("IO")) &&
+                !strings_are_equal(stmt->assign.left->name, create_string("ALU")))
             {
                 u64 usage = map_get_u64(&usedVars, stmt->assign.left->name.data);
                 isUsed = (usage != 0);
+                if (usage == 1)
+                {
+                    i_expect(stmtIdx < (optimizer->statements.stmtCount - 1));
+                    nextStmt = optimizer->statements.stmts[stmtIdx + 1];
+                    if (replace_usage_to_alu(optimizer, nextStmt, stmt->assign.left->name))
+                    {
+                    stmt->assign.left->name = create_string("ALU");
                     }
+                }
+            }
             else
             {
                 isUsed = true;
@@ -1189,16 +1337,17 @@ ast_optimize(AstOptimizer *optimizer)
             if (isUsed)
             {
                 set_usage(&usedVars, stmt->assign.right);
-                          }
+            }
             else
             {
+                #if 0                
                 Expr *expr = stmt->assign.left;
-                
-                fprintf(stderr, "%.*s:%d:%d: Unused variable %.*s.\n",
+fprintf(stderr, "%.*s:%d:%d: Unused variable %.*s.\n",
                         expr->origin.filename.size, expr->origin.filename.data,
                         expr->origin.lineNumber, expr->origin.colNumber,
                         expr->name.size, expr->name.data);
-                
+                #endif
+
                 free_all_expr(optimizer, stmt->assign.left);
                 free_all_expr(optimizer, stmt->assign.right);
                 
@@ -1218,4 +1367,14 @@ ast_optimize(AstOptimizer *optimizer)
             i_expect(stmt->kind == Stmt_Hint);
         }
     }
+}
+
+internal void
+ast_optimize(AstOptimizer *optimizer)
+{
+    ast_collapse_parenthesis(optimizer);
+    ast_assign_var_names(optimizer);
+    ast_expand_single_assignment(optimizer);
+    ast_combine_const(optimizer);
+    ast_remove_unused(optimizer);
 }

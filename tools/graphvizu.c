@@ -517,9 +517,11 @@ test_graph(char *fileName, u32 registers, u32 opCodeCount, OpCode *opCodes, b32 
     switch (opCode.aluOperation)
     {
         case Alu_Noop: { aluOp = "thru"; } break;
-        case Alu_And: { aluOp = "and"; } break;
-        case Alu_Or: { aluOp = "or"; } break;
-        case Alu_Add: { aluOp = "add"; } break;
+        case Alu_Or:   { aluOp = "or"; } break;
+            case Alu_Xor:  { aluOp = "xor"; } break;
+            case Alu_And:  { aluOp = "and"; } break;
+            case Alu_Add:  { aluOp = "add"; } break;
+            case Alu_Sub:  { aluOp = "sub"; } break;
         INVALID_DEFAULT_CASE;
     }
         

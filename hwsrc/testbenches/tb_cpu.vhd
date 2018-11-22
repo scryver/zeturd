@@ -7,7 +7,7 @@ end entity tb_cpu;
 
 architecture Testing of tb_cpu is
 
-    constant BITS : integer := 8;
+    constant BITS : integer := 32;
     constant TIME_DELTA : time := 20 ns;
     constant HALF_TIME  : time := 10 ns;
 
@@ -49,13 +49,13 @@ begin
 
         wait until clk = '0';
         wait for 3 * TIME_DELTA;
-        din <= X"12";
+        din <= X"00000012";
         wait for 5 * TIME_DELTA;
         nrst <= '1';
         wait for 2 * TIME_DELTA;
         load <= '1';
         wait for 40 * TIME_DELTA;
-        din <= X"51";
+        din <= X"00000051";
         load <= '0';
         wait for 200 * TIME_DELTA;
 

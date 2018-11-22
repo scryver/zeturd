@@ -5,6 +5,18 @@ advance(TokenEater *eater)
     ++eater->columnNumber;
 }
 
+internal inline b32
+is_digit(char c, b32 hexAllowed)
+{
+    b32 result = ('0' <= c) && (c <= '9');
+    if (hexAllowed)
+    {
+        result |= ('a' <= c) && (c <= 'f');
+        result |= ('A' <= c) && (c <= 'F');
+    }
+    return result;
+}
+
 #define CASE1(t1) case t1: { \
     token = next_token(result, tokenIndex++); \
     token->kind = t1; \
@@ -129,18 +141,26 @@ tokenize(Buffer buffer, String filename)
                 .data = (u8 *)eater.scanner,
             };
                 token->origin.colNumber = eater.columnNumber;
+                
+                b32 scanHex = false;
             if ((eater.scanner[0] == '0') &&
                 ((eater.scanner[1] == 'x') ||
                  (eater.scanner[1] == 'X') ||
                  (eater.scanner[1] == 'b') ||
                  (eater.scanner[1] == 'B')))
-            {
+                {
+                    if ((eater.scanner[1] == 'x') ||
+                        (eater.scanner[1] == 'X'))
+                    {
+                        scanHex = true;
+                    }
+                    
                 ++value.size;
                 advance(&eater);
             }
             advance(&eater);
 
-            while (('0' <= eater.scanner[0]) && (eater.scanner[0] <= '9'))
+                while (is_digit(eater.scanner[0], scanHex))
             {
                 ++value.size;
                 advance(&eater);

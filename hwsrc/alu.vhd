@@ -15,7 +15,7 @@ entity ALU is
         a    : in  std_logic_vector(BITS - 1 downto 0);
         b    : in  std_logic_vector(BITS - 1 downto 0);
 
-        op   : in  std_logic_vector(1 downto 0);
+        op   : in  std_logic_vector(2 downto 0);
 
         p    : out std_logic_vector(BITS downto 0)
     );
@@ -42,9 +42,15 @@ begin
                     when Alu_Or =>
                         p(BITS - 1 downto 0) <= a or b;
                         p(BITS) <= '0';
+                    when Alu_Xor =>
+                        p(BITS - 1 downto 0) <= a xor b;
+                        p(BITS) <= '0';
                     when Alu_Add =>
-                        p <= std_logic_vector(unsigned(a(BITS - 1) & a) +
-                                              unsigned(b(BITS - 1) & b));
+                        p <= std_logic_vector(signed(a(BITS - 1) & a) +
+                                              signed(b(BITS - 1) & b));
+                    when Alu_Sub =>
+                        p <= std_logic_vector(signed(a(BITS - 1) & a) -
+                                              signed(b(BITS - 1) & b));
                     when others =>
                         null;
                 end case;
